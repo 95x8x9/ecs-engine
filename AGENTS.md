@@ -10,16 +10,14 @@ This project is a graduation research project for building a C++ ECS-based light
 
 The project is not trying to become a general-purpose 3D game engine like Unity or Unreal Engine. In this repository, "game engine" means a minimal real-time runtime layer that supports:
 
-- Application and game loop
-- Window and input handling
-- Time step management
+- Simulation lifecycle and update loop
+- Fixed time step management
 - Scene or World management
 - ECS-based object management
-- Rendering
 - Simulation update
-- Debug and benchmark measurement
+- Headless benchmark and time/memory measurement
 
-The 3D Boids simulation is the research demo that runs on top of this runtime.
+The 3D Boids simulation runs headlessly on top of this runtime. Rendering extensions, visualization, and FPS/frame/render CPU or GPU measurements are excluded from project and thesis completion. Existing graphics code and dependencies remain in the repository as prior functionality.
 
 ## Research Focus
 
@@ -37,9 +35,7 @@ Do not shift the project toward unrelated gameplay features, asset tooling, or a
 ## Tech Stack
 
 - Language: C++20
-- Graphics API: OpenGL 3.3 Core Profile
-- Window/Input: GLFW
-- OpenGL Loader: GLAD
+- Existing graphics dependencies outside the completion scope: OpenGL 3.3 Core Profile, GLFW, vendored GLAD
 - Build System: CMake
 - Dependency Management: vcpkg + vendored GLAD
 
@@ -116,7 +112,7 @@ In `Engine/`, `Boids/`, and `App/`, keep related `.h` and `.cpp` files together 
 
 ## Docs Folder
 
-`docs/research-goals.md` is the single team reference for the graduation research through thesis submission. It consolidates the research goals and former research direction/paper plan, including scope, research questions, implementation status, the issue #30 roadmap, experiment and reproduction procedures, metrics, analysis, thesis structure, and completion criteria. Update it when research decisions, adopted implementations, experiment settings, or verified progress change; do not maintain a separate research plan.
+`docs/research-goals.md` is the single team reference for the graduation research through thesis submission. It consolidates the research goals and former research direction/paper plan, including scope, research questions, the issue #30 roadmap, experiment and reproduction procedures, metrics, analysis, thesis structure, and completion criteria. Update it when research decisions, adopted implementations, experiment settings, or verified progress change; do not maintain a separate research plan. Track implementation status in GitHub issues.
 
 `docs/tech-stack.md` explains the implementation stack, dependency policy, engine scope, and rendering scope. Update this file when build tools, dependencies, graphics API assumptions, or runtime scope change.
 
@@ -132,18 +128,9 @@ Keep benchmark procedures and the thesis plan in `docs/research-goals.md` rather
 
 ## Architecture Direction
 
-Keep the project centered on a lightweight runtime, not a full editor or asset pipeline. The target architecture should evolve toward:
+Keep the remaining implementation centered on the headless simulation runtime, ECS storage, CPU state data, and benchmark support. Do not add rendering adapters, common visualization paths, camera/UI features, or rendering performance instrumentation to complete this project.
 
-```text
-Engine.Core
-Engine.ECS
-Engine.ECSRenderer
-Engine.Renderer
-Engine.Input
-Engine.Benchmark
-```
-
-The runtime should support the research demo with the least unnecessary surface area. Boids-specific simulation code belongs in `Boids`, not in a general engine simulation module.
+The runtime should support the research simulation with the least unnecessary surface area. Boids-specific simulation code belongs in `Boids`, not in a general engine simulation module.
 
 Transform, MeshRenderer, MeshKind, and transform functions live in `Engine/Renderer/` under `engine::renderer`; there is no separate Scene folder or namespace. Keep CPU-only transform code in the GLM-only `Engine::RenderData` CMake target, used by Boids and Renderer, so simulation code does not acquire OpenGL dependencies.
 
@@ -173,36 +160,18 @@ Required simulation data should include:
 
 Prefer deterministic setup for benchmark scenarios. Random initialization should use explicit seeds when performance data will be collected.
 
-## Rendering Scope
+## Excluded Rendering Work
 
-Rendering exists to support real-time visualization and performance experiments.
-
-Prioritize:
-
-- Basic camera
-- Simple 3D agent visualization
-- Low-poly triangle or cone-like agent mesh
-- Instanced Rendering for many agents
-- Stable frame timing
-
-Do not prioritize:
-
-- General-purpose 3D model loading
-- PBR
-- Advanced lighting and shadows
-- Skeletal animation
-- Scene editor
-- Commercial-engine asset pipeline
+Common OOP/Sparse Set/Archetype visualization and frame/render timing instrumentation are outside the completion scope. Do not reintroduce issues #11 and #12 as prerequisites. Existing renderer code and vendored GLAD do not need to be removed for this scope change. Preserve CPU-only Transform data and simulation dependency boundaries.
 
 ## Benchmarking Rules
 
 Performance experiments should measure at least:
 
-- FPS
-- Frame time
-- Simulation update time
-- Rendering time
-- Memory usage if practical
+- Overall and phase-specific simulation update time
+- Updates per second
+- Initialization and first-use cache setup cost
+- Process and container memory usage
 
 Agent counts should be tested in fixed steps, for example:
 
@@ -215,7 +184,7 @@ Agent counts should be tested in fixed steps, for example:
 10000
 ```
 
-Benchmark comparisons should separate simulation cost from rendering cost where possible.
+Benchmark comparisons use headless simulation only. Initialization, warmup, output, and optional external profiling must be distinguished from measured Update time.
 
 Required comparison paths:
 

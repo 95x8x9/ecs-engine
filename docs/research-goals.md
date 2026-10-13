@@ -46,7 +46,7 @@ phase별 처리 비용 관점에서 설명한다.
 
 연구 목표는 다음과 같다.
 
-1. 경량 ECS 런타임과 실행 가능한 3D Boids 데모를 완성한다.
+1. 경량 ECS 런타임과 headless로 실행 가능한 3D Boids 시뮬레이션을 완성한다.
 2. OOP, Sparse Set ECS, Archetype ECS로 동일한 시뮬레이션을 구현·검증한다.
 3. 개체 수에 따른 전체 및 phase별 update 성능을 비교한다.
 4. Sparse Set CachedView와 Archetype 직접 column 순회의 접근 비용을 분석한다.
@@ -83,12 +83,12 @@ CachedView 적용 전후의 보조 비교, phase별 시간, 초기화와 메모�
 
 게임 엔진은 실시간 실행과 시뮬레이션 검증에 필요한 최소 런타임을 의미한다.
 
-- Application 및 game loop, window와 input, timestep 관리
+- 시뮬레이션 초기화·종료 및 고정 시간 간격의 반복 실행
 - World와 ECS 기반 객체 관리: Entity 생성·삭제, Component 추가·조회, System 실행
-- 단순 3D rendering과 simulation update
-- Debug UI, 프레임 통계와 benchmark 측정
+- Boids 행동 계산과 위치·속도·방향 갱신
+- Headless benchmark와 시간·메모리 측정
 
-Boids는 이 런타임 위에서 실행되는 연구용 데모다. 대량 NPC·군중·파티클성 객체를
+Boids는 이 런타임 위에서 실행되는 연구용 시뮬레이션이다. 대량 NPC·군중·파티클성 객체를
 처리하는 상황을 단순화하지만, 결과를 모든 게임 workload에 일반화하지 않는다.
 주 실험은 창과 OpenGL 컨텍스트 없이 CPU simulation만 실행한다.
 
@@ -97,32 +97,22 @@ Boids는 이 런타임 위에서 실행되는 연구용 데모다. 대량 NPC·�
 | 항목 | 기준 |
 | --- | --- |
 | 언어·빌드 | C++20, CMake, Visual Studio 2022 기본 검증, Release 성능 측정 |
-| 그래픽 | OpenGL 3.3 Core Profile, GLFW, vendored GLAD |
-| 의존성 | vcpkg 사용, GLAD 유지, 연구에 필요한 의존성만 추가 |
-| `Engine/` | Core, ECS, ECSRenderer, Renderer, Input, Benchmark 등 재사용 런타임 |
+| 의존성 | vcpkg 사용, 연구에 필요한 의존성만 추가 |
+| `Engine/` | ECS, CPU 상태 데이터와 Benchmark 등 재사용 런타임 |
 | `Boids/Common/` | 공통 설정과 `BoidParameters`; Engine/ECS에 의존하지 않음 |
 | `Boids/OOP/` | 객체 배열 시뮬레이션; `Engine/ECS`에 의존하지 않음 |
 | `Boids/ECS/` 및 Archetype 구현 | ECS 기반 저장·시스템과 연구 도메인 행동 |
-| `App/` | 구현 선택, 콜백 연결, 옵션·출력·App UI를 담당하는 얇은 조립 계층 |
+| `App/` | 구현 선택, 콜백 연결, 옵션·출력을 담당하는 얇은 조립 계층 |
 
-`Engine`에 Boids 행동을 넣지 않는다. `App`에 ECS 쿼리, Boids 시스템, 모델 행렬
-생성이나 OpenGL 렌더링을 구현하지 않는다. Transform, MeshRenderer, MeshKind는
-`Engine/Renderer/`의 `engine::renderer`에 두며, CPU transform 코드는 GLM 전용
-`Engine::RenderData`로 분리하여 simulation이 OpenGL 의존성을 얻지 않게 한다.
-헤더와 소스는 기능별 폴더에 함께 두고 모듈 경로 include를 유지한다.
+`Engine`에 Boids 행동을 넣지 않는다. `App`에 ECS 쿼리나 Boids 시스템을 구현하지
+않는다. 위치·회전·크기 데이터와 관련 계산 코드는 OpenGL 렌더링 코드와 분리한다. 시뮬레이션에서는 GLM 수학 라이브러리만 사용하는 Engine::RenderData Cmake 빌드 타겟을 통해 이를 사용한다. 시뮬레이션에 OpenGL 실행 의존성을 추가하지 않는다.
+헤더와 소스는 기능별 폴더에 함께 둔다.
 
-Entity는 가벼운 ID, Component는 가능한 한 데이터, System은 행동으로 구성한다.
-Sparse Set의 단순하고 측정 가능한 구현을 확정한 뒤 Archetype 실험을 통합한다.
+### 제외 범위
 
-### 렌더링과 제외 범위
-
-기본 카메라, 저폴리 삼각형·원뿔형 agent mesh와 instanced rendering을 사용한다.
-세 구현은 같은 RenderInstance 형식, 카메라, 메시와 렌더 경로를 공유하도록 한다.
-시각화의 FPS·frame time·render CPU time은 보조 지표다.
-
-이번 완료 범위에는 Grid 공간 분할, 멀티스레딩, 범용 Archetype migration·chunk
-engine, 일반 모델 로딩, PBR·고급 조명·그림자, 애니메이션·물리 엔진, 씬 에디터와
-에셋 파이프라인을 추가하지 않는다. 후속 연구 후보는 필수 구현과 분리한다.
+렌더링·시각화의 추가 구현과 FPS·frame time·render CPU/GPU time 측정은 프로젝트
+완료 범위와 논문에서 제외한다. 3D는 위치·속도·행동 계산의 공간 차원을 뜻하며
+화면 출력은 요구하지 않는다.
 
 <a id="implementations"></a>
 
@@ -218,7 +208,6 @@ checksum은 실행 결과의 일치 확인에 사용하되, 폭넓은 상태 동
 | 초기화·메모리 | 같은 N과 생성 데이터, 계측 범위 명시 | RQ3의 생성·저장 비용 비교 |
 | 보조 실험 | 일반 View / CachedView, 동일 기반 코드 | index 조회 제거 효과 확인 |
 | 캐시 프로파일링 | 동일 조건, 일반 시간 측정과 별도 실행 | 접근 비용 해석의 추가 근거 또는 지원 제약 보고 |
-| 시각화 확인 | 같은 renderer·설정·VSync 조건 | 데모와 frame/render CPU 보조 지표 검증 |
 
 기본 개체 수는 **100, 500, 1,000, 3,000**이다. **5,000과 10,000**도 확장
 조건으로 지원하되 실행 시간과 자원에 따라 실시 여부·제외 사유를 기록한다.
@@ -251,16 +240,15 @@ checksum은 실행 결과의 일치 확인에 사용하되, 폭넓은 상태 동
 | 지표 | 정의와 보고 기준 |
 | --- | --- |
 | 전체 update `ms/step` | 실제 `BoidSimulation::Update` 콜백 전후의 경과 시간을 합산한 뒤 measured steps로 나눈 값 |
-| Updates per second | `1,000 / mean_update_ms`; simulation 처리율이며 시각화 FPS와 구분 |
+| Updates per second | `1,000 / mean_update_ms`; 단위 시간당 simulation step 처리율 |
 | Phase `ms/step` | 이웃·acceleration / movement / boundary / orientation 각 구간의 step당 시간 |
 | Pair당 이웃 비용 | 이웃 phase 총 시간을 `measured_steps × N × (N − 1)`로 나눔; N ≤ 1은 적용 불가 |
 | 구현 간 시간 비율 | 기준 구현 시간 / 비교 구현 시간; 분자·분모와 통계 방법을 명시 |
 | Initialization time | N개 개체·component 생성 범위를 명시한 초기화 경과 시간 |
 
 전체 Update 타이머에는 콜백 호출과 실행 중 스케줄링 지연이 포함된다.
-CPU 사용 시간이나 GPU 완료 시간이 아니다. 초기화, warmup, 렌더 데이터 추출,
-UI와 결과 출력은 주 update 측정에서 제외한다. Fixed dt는 가상 시간의 진행량이며
-실제 실행 속도를 제한하지 않는다.
+CPU 사용 시간이 아니다. 초기화, warmup과 결과 출력은 주 update 측정에서 제외한다.
+Fixed dt는 가상 시간의 진행량이며 실제 실행 속도를 제한하지 않는다.
 
 전체 타이머와 phase 타이머는 별도 실행한다. Phase 합계가 콜백·디스패치·계측
 비용까지 포함한 전체 시간과 같다고 가정하지 않는다. 초기화 timer의 시작·끝,
@@ -299,17 +287,6 @@ P-core의 앱 귀속 L1 load miss 비율과 pair당 miss 지표를 우선 확인
 성능 차이의 원인으로 확정하거나 시간으로 miss 값을 만들어 채우지 않는다.
 프로세스 CPU 시간과 cycles는 선택 지표이며 추가 시 경과 시간과 구간을 구분한다.
 
-### 시각화 보조 지표
-
-FPS는 같은 집계 구간의 frame 수 / 전체 시간으로 계산한다. 전체 frame interval에
-이벤트 처리·버퍼 교환 대기 등이 포함되는지 명시한다. Simulation Update, 렌더
-데이터 추출, 모델 행렬 생성, instance buffer 업로드 호출과 draw 제출의 **CPU**
-시간을 구분한다. 카메라·UI·환경선의 포함 범위도 기록한다.
-
-CPU draw 제출 시간은 GPU 완료 시간이 아니다. GPU timer query는 선택 사항이고
-매 frame `glFinish`를 넣지 않는다. VSync, framebuffer 크기, 개체 수, 구현명,
-naive 탐색 방식과 집계 구간을 기록한다. 렌더 계측은 headless에서 실행하지 않는다.
-
 <a id="reproduction"></a>
 
 ## 7. 반복 실행·원자료·재현 절차
@@ -332,11 +309,10 @@ ctest --test-dir build/vs2022 -C Release --output-on-failure
 cmake --preset clangd
 ```
 
-현재 기준 코드의 시각화는 옵션 없는 ECS 실행이다. 현재 benchmark CLI는
-`ecs`와 `oop`를 지원하며, 아래 값은 실행 예시다.
+연구 실행에는 `--benchmark`를 사용한다. 현재 CLI는 `ecs`와 `oop`를 지원하며,
+아래 값은 실행 예시다.
 
 ```powershell
-.\build\vs2022\App\Debug\App.exe
 .\build\vs2022\App\Release\App.exe --help
 .\build\vs2022\App\Release\App.exe --benchmark --implementation ecs --agents 100 --seed 42 --warmup 100 --steps 1000 --dt 0.016666667
 .\build\vs2022\App\Release\App.exe --benchmark --implementation oop --agents 100 --seed 42 --warmup 100 --steps 1000 --dt 0.016666667
@@ -405,7 +381,7 @@ affinity, priority, power_mode
 | runner 실행 명령 / run ID / 원자료·실패 로그 위치 | 미확정 |
 | analyzer 명령 / 신뢰구간 방법·seed / 표·그림 위치 | 미확정 |
 | profiler 명령 / 캐시 자료 또는 지원 제약 보고 위치 | 미확정 |
-| 대표 조건 재실행 기록 / 시각화 확인 기록 | 미확정 |
+| 대표 조건 재실행 기록 | 미확정 |
 
 <a id="analysis"></a>
 
@@ -452,17 +428,14 @@ phase 차이와 코드 경로는 접근 비용을 설명하는 근거지만 캐�
 | 4 | [#29 공통 계측](https://github.com/learncold/ecs-engine/issues/29) | 실제 세 Update의 전체/phase 모드 분리, 초기화·lazy cache 비용과 메모리 범위 정의, 동일 기계 판독 스키마, 계측 on/off 정확성·미지원 표시 |
 | 5 | [#13 반복 자동화·분석](https://github.com/learncold/ecs-engine/issues/13) | 조건별 독립 프로세스·순서 교차, CSV·해시·metadata·실패 로그 보존, 누락/중복/동등성 검사, 원자료 기반 통계·신뢰구간·그래프 재생성 |
 | 6 | [#22 캐시 측정·한계](https://github.com/learncold/ecs-engine/issues/22) | 같은 workload의 실제 경로 프로파일링, P-core 매핑·이벤트·샘플·분모·오버헤드 확인, 결과표 또는 근거 있는 지원 제약 보고서 |
-| 7 | [#11 공통 시각화](https://github.com/learncold/ecs-engine/issues/11) | 세 구현 선택과 같은 renderer 연결, RenderInstance 동등성, 책임 모듈의 추출 어댑터, 창 크기 변경·종료 실검증, headless 유지 |
-| 8 | [#12 frame/render CPU 계측](https://github.com/learncold/ecs-engine/issues/12) | FPS/frame interval 및 Update·추출·행렬·업로드·draw CPU 구간, VSync·집계 범위 명시, 계측 비활성화·headless 분리 |
-| 9 | [#30 최종 통합·전체 측정](https://github.com/learncold/ecs-engine/issues/30) | 하나의 동결 commit, 전체 검증, 기본 조건별 9회 이상 측정, 원자료·통계·재실행·문서와 RQ 결과 연결 |
+| 7 | [#30 최종 통합·전체 측정](https://github.com/learncold/ecs-engine/issues/30) | 하나의 동결 commit, 전체 검증, 기본 조건별 9회 이상 측정, 원자료·통계·재실행·문서와 RQ 결과 연결 |
 
 관련 단계마다 VS2022 Debug/Release 빌드·테스트를 확인한다. CMake나 파일 배치가
-바뀌면 clangd database도 갱신한다. 이미 구현된 timer·instancing은 재사용한다.
+바뀌면 clangd database도 갱신한다. 기존 Benchmarker와 Update 경로를 재사용한다.
 
-#13의 기술적 선행은 #29이며 공통 시각화를 기다리지 않는다. #11의 기술적
-선행은 #28이고 #12는 #11 이후다. 연구 benchmark를 먼저 마무리하는 위 순서를
-유지한다. 캐시 카운터가 장치에서 미지원이어도 근거·해석 제한을 남기면 #22를
-판정할 수 있지만, 초기화·메모리 기본 계측은 별도로 완료해야 한다.
+#13의 기술적 선행은 #29이며 #22는 #13 및 #29 이후에 진행한다. 캐시 카운터가
+장치에서 미지원이어도 근거·해석 제한을 남기면 #22를 판정할 수 있지만,
+초기화·메모리 기본 계측은 별도로 완료해야 한다.
 
 <a id="paper"></a>
 
@@ -522,6 +495,7 @@ phase 차이와 코드 경로는 접근 비용을 설명하는 근거지만 캐�
 | 날짜 | 결정·변경 | 근거와 영향 |
 | --- | --- | --- |
 | 2026-10-13 | 두 연구 문서를 이 문서로 통합, #30 순서·수용 기준 반영 | 연구·실험·논문 기준 통합; 연구 범위 유지 |
+| 2026-10-13 | 렌더링 추가 구현·시각화·렌더 성능 측정을 프로젝트와 논문 범위에서 제외 | Headless 시뮬레이션 비교에 집중; #11·#12 제외 및 #30 완료 기준 정리 |
 
 이후 연구 범위·기본 경로·파라미터·horizon·통계 방법을 바꾸면 날짜, 이유,
 근거와 재측정 필요 조건을 기록한다. 최종 코드 동결 후 변경하면 영향받는
@@ -536,14 +510,13 @@ phase 차이와 코드 경로는 접근 비용을 설명하는 근거지만 캐�
 
 ### 구현·정확성
 
-- [ ] #30의 8개 선행 이슈 수용 기준을 충족한 코드가 하나의 기준 commit에 반영됨
+- [ ] #30의 6개 선행 이슈 수용 기준을 충족한 코드가 하나의 기준 commit에 반영됨
 - [ ] 최종 경로가 연속 객체 OOP / Sparse CachedView / 단일 고정 Archetype이며 동일 naive all-pairs 사용
 - [ ] 후보 최적화·일반 View 보조 경로와 최종 기본 경로를 구분함
 - [ ] VS2022 configure, Debug/Release 빌드·전체 테스트 및 세 CLI smoke 통과
 - [ ] 최종 CMake의 clangd database 갱신
 - [ ] 여러 seed·경계·퇴화 조건과 기본/확장 horizon에서 매 step 상태 동등성·허용 오차 검증
 - [ ] OOP의 ECS 비의존성, RenderData와 App 책임 경계 유지
-- [ ] 세 시각화의 같은 렌더 경로, 창 크기 변경·종료, FPS/frame/render CPU와 VSync 조건 확인
 
 ### 실험·재현성
 
@@ -567,8 +540,8 @@ phase 차이와 코드 경로는 접근 비용을 설명하는 근거지만 캐�
 - [ ] 구현 완료 후 측정한 결과만 사용하고 모든 표·그림의 원자료·단위·반복 수 대조
 - [ ] 참고문헌 서지·인용과 학교 형식·분량·제출 요건 확인
 - [ ] README·architecture·tech-stack 및 이 문서의 실제 구현·미완료 상태 정합성 확인
-- [ ] 실행 가능한 엔진·3D Boids 데모, 최종 소스 commit, 재현 자료와 논문 완성본 보존
-- [ ] 팀원이 같은 환경에서 재현 절차와 시연을 확인하고 제출본을 함께 검토
+- [ ] 실행 가능한 런타임·headless 3D Boids 시뮬레이션, 최종 소스 commit, 재현 자료와 논문 완성본 보존
+- [ ] 팀원이 같은 환경에서 실행·재현 절차를 확인하고 제출본을 함께 검토
 
 <a id="references"></a>
 

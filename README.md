@@ -8,38 +8,34 @@ ECS 기반 경량 게임 엔진 프로토타입 졸업 프로젝트입니다. �
 
 이 프로젝트에서의 게임 엔진은 Unity나 Unreal Engine 같은 범용 제작 도구가 아니라, 실시간 게임 실행 환경을 구성하는 최소 런타임 계층을 의미합니다.
 
-포함 범위:
+최종 구현·연구 범위:
 
-- Application 및 game loop
-- Window 및 input 처리
-- Time step 관리
-- Scene 또는 World 관리
-- ECS 기반 객체 관리
-- Rendering
+- 시뮬레이션 실행·수명 관리와 update loop
+- Fixed timestep 관리
+- World 및 ECS 기반 객체 관리
 - Simulation update
-- Debug 및 benchmark 측정
+- Headless benchmark와 시간·메모리 측정
 
-Boids 시뮬레이션은 별도의 단독 계산 프로그램이 아니라, 위 런타임 계층 위에서 실행되는 연구용 데모로 사용합니다.
+Boids 시뮬레이션은 위 런타임 계층에서 headless로 실행하여 세 저장 구조를 비교합니다.
+렌더링 추가 구현과 시각화·FPS·프레임·렌더 CPU/GPU 시간 측정은 프로젝트 완료 및
+논문 범위에서 제외합니다. 기존 그래픽 코드와 빌드 의존성은 유지합니다.
 
 ## Tech Stack
 
 - Language: C++20
-- Graphics API: OpenGL 3.3 Core Profile
-- Window/Input: GLFW
-- OpenGL Loader: GLAD
+- Existing graphics dependencies: OpenGL 3.3 Core Profile, GLFW, vendored GLAD
 - Build System: CMake
 - Dependency Management: vcpkg + vendored GLAD
 
 ## Research Scope
 
 - 3D 공간 기반 Boids 군집 시뮬레이션
-- 단순 3D 에이전트 렌더링
-- Instanced rendering을 통한 대량 에이전트 시각화
 - OOP, Sparse Set ECS와 Archetype ECS의 성능 비교
 - 동일한 naive all-pairs 이웃 탐색을 사용한 저장 구조 비교
 
 범위 밖 항목:
 
+- 공통 시각화 추가 구현 및 FPS·프레임·렌더링 성능 계측
 - 범용 3D 모델 로딩
 - PBR 및 고급 조명 시스템
 - 애니메이션 시스템
@@ -88,11 +84,8 @@ cmake --preset clangd
 
 ## Run and Benchmark
 
-옵션 없이 실행하면 기존 3D 시각화를 사용합니다.
-
-```powershell
-.\build\vs2022\App\Debug\App.exe
-```
+연구 실행에는 `--benchmark`를 사용합니다. 옵션 없는 기존 ECS 시각화는
+프로젝트 완료·논문 평가 범위에서 제외된 기존 기능입니다.
 
 성능 측정에는 Release 빌드를 사용합니다. `--benchmark`는 창이나 OpenGL
 컨텍스트를 생성하지 않고 선택한 ECS 또는 OOP naive 시뮬레이션만 실행합니다.
@@ -157,8 +150,8 @@ ECS-engine/
 `Engine`은 공통 런타임·Renderer·ECS를 제공하고, `Boids`는 연구 도메인의
 ECS와 OOP 시뮬레이션을 포함합니다. `App`은 두 모듈을 조립해 실행하는 얇은
 계층입니다.
-렌더링은 ECS와 무관한 `RenderInstance` 배열을 입력으로 받으므로 향후 OOP 구현도
-같은 Renderer를 공유할 수 있습니다.
+기존 Renderer와 ECSRenderer는 저장소에 남아 있지만, OOP/Archetype 렌더 어댑터와
+공통 시각화 경로를 추가하는 작업은 완료 범위에서 제외합니다.
 
 `Boids/Common`은 공통 설정과 `BoidParameters`를 제공합니다. `Boids/ECS`는
 컴포넌트와 시스템으로 시뮬레이션을 구현하고, `Boids/OOP`는 연속된 객체 배열과

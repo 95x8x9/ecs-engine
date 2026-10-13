@@ -3,7 +3,9 @@
 ## 개요
 
 이 프로젝트는 ECS 기반 3D Boids 시뮬레이션과 OOP 기준 구현의 성능을 비교하기
-위한 경량 런타임이다. 구현은 책임에 따라 `Engine`, `Boids`, `App`으로 나뉜다.
+위한 경량 런타임이다. 최종 구현·평가는 headless 시뮬레이션과 benchmark에
+집중한다. 렌더링 추가 구현·공통 시각화·프레임 및 렌더 성능 계측은 완료 범위에서
+제외하며 기존 그래픽 모듈은 유지한다. 구현은 책임에 따라 `Engine`, `Boids`, `App`으로 나뉜다.
 
 - `Engine`: 재사용 가능한 실행, 입력, ECS, 렌더링 데이터와 렌더링 기능
 - `Boids`: 공통 Boids 설정과 ECS/OOP 시뮬레이션
@@ -21,7 +23,9 @@ CMake 타깃은 프로젝트 루트를 헤더 검색 경로로 사용하므로
 `#include "Engine/Core/application.h"` 같은 모듈 경로를 유지한다.
 헤더 검색 경로가 공유되어도 위의 모듈 의존 방향과 타깃 간 링크 관계는 유지한다.
 
-## 실행 흐름
+## 기존 ECS 시각화 실행 흐름
+
+다음은 현재 코드의 기존 동작을 설명하며 추가 구현·논문 평가 대상이 아니다.
 
 1. App이 창과 OpenGL Context를 초기화한다.
 2. Boids ECS 시뮬레이션과 Engine 렌더러를 초기화한다.
@@ -44,6 +48,8 @@ CMake 타깃은 프로젝트 루트를 헤더 검색 경로로 사용하므로
   Orbit 조작, Grid/경계선, Instanced Agent 렌더링
 - `ECSRenderer`: ECS View를 공통 Renderer 입력으로 바꾸는 어댑터
 - `Benchmark`: 고정 timestep의 워밍업·측정 루프와 업데이트 시간 수집
+
+## Headless 연구 실행 흐름
 
 `--benchmark` 모드에서 App은 창이나 렌더러를 생성하기 전에 분기한다.
 `--implementation ecs|oop` 옵션에 따라 시뮬레이션을 생성한 후 공통
@@ -83,10 +89,9 @@ struct RenderInstance {
 };
 ```
 
-ECS 경로에서는 `EcsRenderSystem`이 Registry로부터 이 배열을 만든다. 향후 OOP
-경로에서는 객체 배열로부터 같은 `RenderInstance` 배열을 만들어
-`AgentRenderManager`를 직접 호출한다. 따라서 OOP 구현은 `Engine::ECS`에 의존할
-필요가 없다.
+기존 ECS 경로에서는 `EcsRenderSystem`이 Registry로부터 이 배열을 만든다.
+OOP/Archetype 렌더 어댑터와 공통 시각화 추가는 완료 범위에서 제외한다.
+OOP 시뮬레이션의 `Engine::ECS` 비의존성은 유지한다.
 
 ## Boids 모듈
 
