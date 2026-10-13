@@ -116,7 +116,7 @@ In `Engine/`, `Boids/`, and `App/`, keep related `.h` and `.cpp` files together 
 
 ## Docs Folder
 
-`docs/research-goals.md` defines the research problem, scope, research questions, experiment design, performance metrics, priorities, and exclusions. Update this file when the academic direction changes.
+`docs/research-goals.md` is the single team reference for the graduation research through thesis submission. It consolidates the research goals and former research direction/paper plan, including scope, research questions, implementation status, the issue #30 roadmap, experiment and reproduction procedures, metrics, analysis, thesis structure, and completion criteria. Update it when research decisions, adopted implementations, experiment settings, or verified progress change; do not maintain a separate research plan.
 
 `docs/tech-stack.md` explains the implementation stack, dependency policy, engine scope, and rendering scope. Update this file when build tools, dependencies, graphics API assumptions, or runtime scope change.
 
@@ -127,7 +127,8 @@ In `Engine/`, `Boids/`, and `App/`, keep related `.h` and `.cpp` files together 
 Future recommended docs, only when their topics need more detail:
 
 - `docs/ecs-design.md` for ECS storage and API decisions
-- `docs/benchmark-plan.md` for measurement procedures
+
+Keep benchmark procedures and the thesis plan in `docs/research-goals.md` rather than creating a duplicate plan.
 
 ## Architecture Direction
 
