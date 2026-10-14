@@ -15,7 +15,8 @@ target_link_libraries(App
     PRIVATE
         Boids::ECS
         Boids::OOP
-        Engine::Benchmark
+        Engine::Measurement
+        Benchmarker::Experiment
         Engine::Core
         Engine::ECSRenderer
         Engine::Renderer

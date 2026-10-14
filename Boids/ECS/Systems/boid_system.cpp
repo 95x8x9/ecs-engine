@@ -42,13 +42,17 @@ glm::vec3 CalculateAlignment(const glm::vec3& velocity_sum,
 }  // namespace
 
 void BoidSystem::Update(engine::ecs::Registry& registry,
-                        float /* delta_seconds */) {
+                        float /* delta_seconds */,
+                        engine::measurement::TimingRecorder& timing) {
+  timing.start("query_preparation");
   if (!neighbor_view_.has_value()) {
     neighbor_view_.emplace(registry);
   } else if (!neighbor_view_->IsCurrent(registry)) {
     neighbor_view_->Refresh(registry);
   }
+  timing.stop("query_preparation");
 
+  timing.start("neighbor_calculation");
   registry
       .CreateView<engine::renderer::Transform, Velocity, BoidParameters,
                   Acceleration>()
@@ -59,6 +63,16 @@ void BoidSystem::Update(engine::ecs::Registry& registry,
         acceleration.value = CalculateAcceleration(
             *neighbor_view_, entity, transform, velocity, parameters);
       });
+  timing.stop("neighbor_calculation");
+}
+
+void BoidSystem::AppendStorageReport(
+    engine::measurement::StorageReport& report) const {
+  if (neighbor_view_) {
+    neighbor_view_->AppendStorageReport(report, "neighbors.cached_entries");
+  } else {
+    report.add_bytes("neighbors.cached_entries", 0U, 0U);
+  }
 }
 
 glm::vec3 BoidSystem::CalculateAcceleration(
@@ -72,32 +86,30 @@ glm::vec3 BoidSystem::CalculateAcceleration(
   std::size_t neighbor_count = 0U;
 
   constexpr float kMinDistanceSquared = 0.00000001F;
-  neighbor_view.Each(
-      [&](engine::ecs::Entity other,
-          const engine::renderer::Transform& other_transform,
-          const Velocity& other_velocity) {
-        if (other == self) {
-          return;
-        }
+  neighbor_view.Each([&](engine::ecs::Entity other,
+                         const engine::renderer::Transform& other_transform,
+                         const Velocity& other_velocity) {
+    if (other == self) {
+      return;
+    }
 
-        const glm::vec3 offset =
-            other_transform.position - self_transform.position;
-        const float distance_squared = glm::dot(offset, offset);
-        if (distance_squared >=
-            self_parameters.neighbor_radius * self_parameters.neighbor_radius) {
-          return;
-        }
+    const glm::vec3 offset = other_transform.position - self_transform.position;
+    const float distance_squared = glm::dot(offset, offset);
+    if (distance_squared >=
+        self_parameters.neighbor_radius * self_parameters.neighbor_radius) {
+      return;
+    }
 
-        ++neighbor_count;
-        velocity_sum += other_velocity.value;
-        position_sum += other_transform.position;
+    ++neighbor_count;
+    velocity_sum += other_velocity.value;
+    position_sum += other_transform.position;
 
-        if (distance_squared > kMinDistanceSquared &&
-            distance_squared < self_parameters.separation_radius *
-                                   self_parameters.separation_radius) {
-          separation -= offset / distance_squared;
-        }
-      });
+    if (distance_squared > kMinDistanceSquared &&
+        distance_squared < self_parameters.separation_radius *
+                               self_parameters.separation_radius) {
+      separation -= offset / distance_squared;
+    }
+  });
 
   if (neighbor_count == 0U) {
     return glm::vec3{0.0F};

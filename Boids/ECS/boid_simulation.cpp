@@ -17,6 +17,7 @@
 
 namespace boids::ecs {
 
+// Validate config and add systems to system manager
 BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
     : config_(std::move(config)) {
   if (config_.boundary_half_extent <= 0.0F) {
@@ -32,11 +33,13 @@ BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
   }
 
   system_manager_.Add<BoidSystem>();
-  system_manager_.Add<MovementSystem>();
-  system_manager_.Add<BoundarySystem>(config_.boundary_half_extent);
-  system_manager_.Add<BoidOrientationSystem>();
+  system_manager_.AddTimed<MovementSystem>("state_update");
+  system_manager_.AddTimed<BoundarySystem>("state_update",
+                                           config_.boundary_half_extent);
+  system_manager_.AddTimed<BoidOrientationSystem>("state_update");
 }
 
+// Initalize entities to simulation
 void BoidSimulation::Initialize() {
   registry_.Clear();
 
@@ -62,10 +65,11 @@ void BoidSimulation::Initialize() {
     const glm::vec3 velocity = direction * config_.initial_speed;
 
     registry_.Emplace<engine::renderer::Transform>(
-        entity, engine::renderer::Transform{
-                    .position = position,
-                    .rotation = engine::renderer::RotationFromDirection(velocity),
-                    .scale = 0.7F});
+        entity,
+        engine::renderer::Transform{
+            .position = position,
+            .rotation = engine::renderer::RotationFromDirection(velocity),
+            .scale = 0.7F});
     registry_.Emplace<engine::renderer::MeshRenderer>(entity);
     registry_.Emplace<Velocity>(entity, Velocity{.value = velocity});
     registry_.Emplace<Acceleration>(entity, Acceleration{});
@@ -74,10 +78,27 @@ void BoidSimulation::Initialize() {
 }
 
 void BoidSimulation::Update(float delta_seconds) {
+  engine::measurement::TimingRecorder disabled;
+  disabled.set_enabled(false);
+  Update(delta_seconds, disabled);
+}
+
+void BoidSimulation::Update(float delta_seconds,
+                            engine::measurement::TimingRecorder& timing) {
   if (delta_seconds < 0.0F) {
     throw std::invalid_argument("Delta time cannot be negative");
   }
-  system_manager_.Update(registry_, delta_seconds);
+  // Dummy churn is not implemented yet; current entity changes require no work.
+  timing.record_zero("entity_changes");
+  system_manager_.Update(registry_, delta_seconds, timing);
+}
+
+engine::measurement::StorageReport BoidSimulation::GetStorageReport() const {
+  engine::measurement::StorageReport report;
+  report.add_objects<BoidSimulation>("simulation.object", 1U);
+  registry_.AppendStorageReport(report);
+  system_manager_.AppendStorageReport(report);
+  return report;
 }
 
 }  // namespace boids::ecs

@@ -1,5 +1,8 @@
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -24,18 +27,39 @@ int main(int argc, char* argv[]) try {
   }
 
   if (options.benchmark_enabled) {
-    engine::benchmark::BenchmarkResult result;
+    benchmarker::ExperimentResult result;
 
     switch (options.implementation) {
       case app::SimulationImplementation::Ecs:
-        result = app::RunBenchmark<boids::ecs::BoidSimulation>(options);
+        result = benchmarker::RunBenchmark<boids::ecs::BoidSimulation>(
+            options.simulation_config, options.benchmark_config, "ecs");
         break;
       case app::SimulationImplementation::Oop:
-        result = app::RunBenchmark<boids::oop::BoidSimulation>(options);
+        result = benchmarker::RunBenchmark<boids::oop::BoidSimulation>(
+            options.simulation_config, options.benchmark_config, "oop");
         break;
     }
 
-    app::PrintBenchmarkResult(std::cout, options, result);
+    std::filesystem::path output_path(options.output_path);
+    if (output_path.empty()) {
+      for (const auto& [name, value] : result.environment) {
+        if (name == "run_id") {
+          output_path = std::filesystem::path("out/benchmarks") /
+                        (result.implementation + "-" + value + ".csv");
+          break;
+        }
+      }
+    }
+    if (!output_path.parent_path().empty()) {
+      std::filesystem::create_directories(output_path.parent_path());
+    }
+    std::ofstream output(output_path);
+    if (!output) throw std::runtime_error("Cannot open benchmark output file");
+    benchmarker::WriteCsv(output, result);
+    output.close();
+    if (!output) throw std::runtime_error("Cannot write benchmark output file");
+    benchmarker::PrintSummary(std::cout, result);
+    std::cout << "Raw results: " << output_path.string() << '\n';
     return 0;
   }
 

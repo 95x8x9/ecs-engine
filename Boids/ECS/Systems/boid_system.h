@@ -7,13 +7,18 @@
 #include "Boids/ECS/Components/velocity.h"
 #include "Engine/ECS/entity.h"
 #include "Engine/ECS/system.h"
+#include "Engine/Measurement/timing_recorder.h"
 #include "Engine/Renderer/transform.h"
 
 namespace boids::ecs {
 
 class BoidSystem final : public engine::ecs::System {
  public:
-  void Update(engine::ecs::Registry& registry, float delta_seconds) override;
+  using engine::ecs::System::Update;
+  void Update(engine::ecs::Registry& registry, float delta_seconds,
+              engine::measurement::TimingRecorder& timing) override;
+  void AppendStorageReport(
+      engine::measurement::StorageReport& report) const override;
 
  private:
   using NeighborView =

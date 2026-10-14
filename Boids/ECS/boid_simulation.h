@@ -12,6 +12,9 @@ class BoidSimulation {
 
   void Initialize();
   void Update(float delta_seconds);
+  void Update(float delta_seconds,
+              engine::measurement::TimingRecorder& timing_recorder);
+  [[nodiscard]] engine::measurement::StorageReport GetStorageReport() const;
 
   [[nodiscard]] engine::ecs::Registry& GetRegistry() { return registry_; }
   [[nodiscard]] const engine::ecs::Registry& GetRegistry() const {

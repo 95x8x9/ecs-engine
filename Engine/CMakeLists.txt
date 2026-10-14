@@ -13,11 +13,15 @@ function(configure_engine_target target_name)
     endif()
 endfunction()
 
-add_library(EngineBenchmark STATIC
-    Benchmark/benchmarker.cpp
+add_library(EngineMeasurement STATIC
+    Measurement/timing_recorder.cpp
+    Measurement/memory_measurement.cpp
 )
-add_library(Engine::Benchmark ALIAS EngineBenchmark)
-configure_engine_target(EngineBenchmark)
+add_library(Engine::Measurement ALIAS EngineMeasurement)
+configure_engine_target(EngineMeasurement)
+if(WIN32)
+    target_link_libraries(EngineMeasurement PRIVATE psapi)
+endif()
 
 add_library(EngineInput STATIC
     Input/input.cpp
@@ -107,6 +111,7 @@ add_library(EngineECS STATIC
 add_library(Engine::ECS ALIAS EngineECS)
 
 configure_engine_target(EngineECS)
+target_link_libraries(EngineECS PUBLIC Engine::Measurement)
 
 add_library(EngineECSRenderer STATIC
     ECSRenderer/ecs_render_system.cpp

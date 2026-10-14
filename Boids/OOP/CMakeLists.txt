@@ -15,6 +15,7 @@ target_compile_features(BoidsOOP PUBLIC cxx_std_20)
 target_link_libraries(BoidsOOP
     PUBLIC
         Boids::Common
+        Engine::Measurement
         Engine::RenderData
 )
 

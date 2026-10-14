@@ -3,10 +3,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "Engine/ECS/entity.h"
+#include "Engine/Measurement/memory_measurement.h"
 
 namespace engine::ecs {
 
@@ -24,6 +27,8 @@ class IComponentStorage {
 
   virtual void Remove(Entity entity) = 0;
   virtual void Clear() = 0;
+  virtual void AppendStorageReport(measurement::StorageReport& report,
+                                   std::string_view prefix) const = 0;
 };
 
 template <typename Component>
@@ -44,8 +49,7 @@ class ComponentStorage final : public IComponentStorage {
 
     EnsureSparseSize(entity);
 
-    sparse_[entity.Value()] =
-        static_cast<DenseIndex>(dense_entities_.size());
+    sparse_[entity.Value()] = static_cast<DenseIndex>(dense_entities_.size());
     dense_entities_.push_back(entity);
     dense_components_.push_back(Component{std::forward<Args>(args)...});
     ++structural_revision_;
@@ -120,6 +124,15 @@ class ComponentStorage final : public IComponentStorage {
   }
 
   [[nodiscard]] std::size_t Size() const { return dense_components_.size(); }
+
+  void AppendStorageReport(measurement::StorageReport& report,
+                           std::string_view prefix) const override {
+    const std::string name(prefix);
+    report.add_objects<ComponentStorage>(name + ".object", 1U);
+    report.add_vector(name + ".sparse", sparse_);
+    report.add_vector(name + ".dense_entities", dense_entities_);
+    report.add_vector(name + ".dense_components", dense_components_);
+  }
 
  private:
   template <typename... Components>

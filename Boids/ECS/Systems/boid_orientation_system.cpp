@@ -7,8 +7,9 @@
 
 namespace boids::ecs {
 
-void BoidOrientationSystem::Update(engine::ecs::Registry& registry,
-                                   float /* delta_seconds */) {
+void BoidOrientationSystem::Update(
+    engine::ecs::Registry& registry, float /* delta_seconds */,
+    engine::measurement::TimingRecorder& /* timing */) {
   registry.CreateView<engine::renderer::Transform, Velocity, BoidParameters>()
       .Each([](engine::renderer::Transform& transform, const Velocity& velocity,
                const BoidParameters&) {

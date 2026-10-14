@@ -17,10 +17,11 @@ TEST(CommandLineOptionsTest, DefaultsToInteractiveAndSupportsHelp) {
 }
 
 TEST(CommandLineOptionsTest, ParsesExplicitExperimentConditions) {
-  const std::array args{"--implementation"sv, "oop"sv, "--agents"sv,
-                        "500"sv, "--seed"sv, "0"sv, "--warmup"sv,
-                        "0"sv, "--steps"sv, "25"sv, "--dt"sv,
-                        "0.02"sv, "--benchmark"sv};
+  const std::array args{
+      "--implementation"sv, "oop"sv,         "--agents"sv,   "500"sv,
+      "--seed"sv,           "0"sv,           "--warmup"sv,   "0"sv,
+      "--steps"sv,          "25"sv,          "--dt"sv,       "0.02"sv,
+      "--output"sv,         "results.csv"sv, "--benchmark"sv};
   const auto options = app::ParseCommandLineOptions(args);
   EXPECT_TRUE(options.benchmark_enabled);
   EXPECT_EQ(options.implementation, app::SimulationImplementation::Oop);
@@ -29,6 +30,7 @@ TEST(CommandLineOptionsTest, ParsesExplicitExperimentConditions) {
   EXPECT_EQ(options.benchmark_config.warmup_steps, 0U);
   EXPECT_EQ(options.benchmark_config.measurement_steps, 25U);
   EXPECT_FLOAT_EQ(options.benchmark_config.fixed_delta_seconds, 0.02F);
+  EXPECT_EQ(options.output_path, "results.csv");
 }
 
 TEST(CommandLineOptionsTest, RejectsMalformedOrAmbiguousInvocations) {
@@ -44,7 +46,9 @@ TEST(CommandLineOptionsTest, RejectsMalformedOrAmbiguousInvocations) {
       {"--benchmark", "--seed", "4294967296"},
       {"--benchmark", "--dt", "nan"},
       {"--benchmark", "--dt", "inf"},
-      {"--benchmark", "--dt", "0"}};
+      {"--benchmark", "--dt", "0"},
+      {"--benchmark", "--output", ""},
+      {"--output", "results.csv"}};
   for (const auto& args : cases) {
     EXPECT_THROW(static_cast<void>(app::ParseCommandLineOptions(args)),
                  std::invalid_argument);

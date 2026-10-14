@@ -1,10 +1,9 @@
 #include "Boids/OOP/boid_simulation.h"
 
+#include <glm/geometric.hpp>
 #include <random>
 #include <stdexcept>
 #include <utility>
-
-#include <glm/geometric.hpp>
 
 #include "Boids/OOP/boid_object.h"
 
@@ -54,14 +53,26 @@ void BoidSimulation::Initialize() {
 }
 
 void BoidSimulation::Update(float delta_seconds) {
+  engine::measurement::TimingRecorder disabled;
+  disabled.set_enabled(false);
+  Update(delta_seconds, disabled);
+}
+
+void BoidSimulation::Update(float delta_seconds,
+                            engine::measurement::TimingRecorder& timing) {
   if (delta_seconds < 0.0F) {
     throw std::invalid_argument("Delta time cannot be negative");
   }
 
+  timing.record_zero("entity_changes");
+  timing.record_zero("query_preparation");
+  timing.start("neighbor_calculation");
   for (auto& boid : boids_) {
     boid.CalculateAcceleration(boids_);
   }
+  timing.stop("neighbor_calculation");
 
+  timing.start("state_update");
   for (auto& boid : boids_) {
     boid.Move(delta_seconds);
   }
@@ -73,6 +84,14 @@ void BoidSimulation::Update(float delta_seconds) {
   for (auto& boid : boids_) {
     boid.UpdateOrientation();
   }
+  timing.stop("state_update");
+}
+
+engine::measurement::StorageReport BoidSimulation::GetStorageReport() const {
+  engine::measurement::StorageReport report;
+  report.add_objects<BoidSimulation>("simulation.object", 1U);
+  report.add_vector("boids.objects", boids_);
+  return report;
 }
 
 }  // namespace boids::oop
