@@ -1,7 +1,6 @@
 #include "App/command_line_options.h"
 
 #include <charconv>
-#include <iomanip>
 #include <ostream>
 #include <stdexcept>
 #include <string>
@@ -38,7 +37,7 @@ CommandLineOptions ParseCommandLineOptions(
     }
     if (option != "--implementation" && option != "--agents" &&
         option != "--seed" && option != "--warmup" && option != "--steps" &&
-        option != "--dt") {
+        option != "--dt" && option != "--output") {
       throw std::invalid_argument("Unknown option: " + std::string(option));
     }
     if (++index == arguments.size()) {
@@ -67,6 +66,10 @@ CommandLineOptions ParseCommandLineOptions(
     } else if (option == "--steps") {
       options.benchmark_config.measurement_steps =
           ParseNumber<std::size_t>(value, option);
+    } else if (option == "--output") {
+      if (value.empty())
+        throw std::invalid_argument("Output path must not be empty");
+      options.output_path = value;
     } else {
       options.benchmark_config.fixed_delta_seconds =
           ParseNumber<float>(value, option);
@@ -79,55 +82,20 @@ CommandLineOptions ParseCommandLineOptions(
     throw std::invalid_argument("Agent count must be positive");
   }
   // Validate before allocating or initializing the simulation.
-  const engine::benchmark::Benchmarker validation(options.benchmark_config);
+  benchmarker::ValidateConfig(options.benchmark_config);
   return options;
 }
 
 void PrintUsage(std::ostream& output) {
   output << "Usage: App.exe [--benchmark [--implementation ecs|oop]\n"
             "               [--agents N] [--seed N] [--warmup N]\n"
-            "               [--steps N] [--dt SECONDS]]\n"
+            "               [--steps N] [--dt SECONDS] [--output FILE.csv]]\n"
             "       App.exe --help\n"
             "Without options: interactive 3D simulation.\n"
             "Benchmark defaults: agents=100, seed=42, warmup=100, steps=1000, "
-            "dt=1/60 s.\n";
-}
-
-void PrintBenchmarkResult(std::ostream& output,
-                          const CommandLineOptions& options,
-                          const engine::benchmark::BenchmarkResult& result) {
-  const auto& simulation_config = options.simulation_config;
-  const auto& parameters = simulation_config.parameters;
-  const char* implementation =
-      options.implementation == SimulationImplementation::Ecs ? "ECS"
-                                                              : "OOP";
-  output << std::setprecision(9) << "Benchmark: " << implementation
-         << " / naive / simulation-only\n"
-#ifdef NDEBUG
-         << "Build: Release (NDEBUG)\n"
-#else
-         << "Build: Debug (use Release for performance comparisons)\n"
-#endif
-         << "Agents: " << simulation_config.boid_count
-         << "\nSeed: " << simulation_config.random_seed
-         << "\nFixed timestep (s): "
-         << options.benchmark_config.fixed_delta_seconds
-         << "\nWarmup steps: " << options.benchmark_config.warmup_steps
-         << "\nMeasured steps: " << result.measured_steps
-         << "\nSpawn half extent: " << simulation_config.spawn_half_extent
-         << "\nBoundary half extent: " << simulation_config.boundary_half_extent
-         << "\nInitial speed: " << simulation_config.initial_speed
-         << "\nNeighbor radius: " << parameters.neighbor_radius
-         << "\nSeparation radius: " << parameters.separation_radius
-         << "\nSeparation weight: " << parameters.separation_weight
-         << "\nAlignment weight: " << parameters.alignment_weight
-         << "\nCohesion weight: " << parameters.cohesion_weight
-         << "\nPreferred speed: " << parameters.preferred_speed
-         << "\nMax speed: " << parameters.max_speed
-         << "\nMax alignment force: " << parameters.max_alignment_force
-         << "\nTotal update time (ms): " << result.total_update_ms
-         << "\nMean update time (ms/step): " << result.mean_update_ms
-         << "\nUpdates/s: " << result.updates_per_second << '\n';
+            "dt=1/60 s.\n"
+            "Raw CSV is saved to --output or "
+            "out/benchmarks/<implementation>-<run-id>.csv.\n";
 }
 
 }  // namespace app

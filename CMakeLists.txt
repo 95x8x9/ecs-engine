@@ -18,6 +18,7 @@ find_package(imgui CONFIG REQUIRED)
 add_subdirectory(third_party/glad)
 add_subdirectory(Engine)
 add_subdirectory(Boids)
+add_subdirectory(Benchmarker)
 add_subdirectory(App)
 
 include(CTest)
