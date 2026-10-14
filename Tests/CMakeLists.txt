@@ -19,6 +19,13 @@ target_link_libraries(EngineBenchmarkTests PRIVATE Engine::Benchmark GTest::gtes
 configure_test_target(EngineBenchmarkTests)
 gtest_discover_tests(EngineBenchmarkTests)
 
+add_executable(EngineMeasurementTests
+    unit/timing_recorder_tests.cpp
+)
+target_link_libraries(EngineMeasurementTests PRIVATE Engine::Measurement GTest::gtest_main)
+configure_test_target(EngineMeasurementTests)
+gtest_discover_tests(EngineMeasurementTests)
+
 add_executable(AppCommandLineOptionsTests
     unit/command_line_options_tests.cpp
     ${PROJECT_SOURCE_DIR}/App/command_line_options.cpp

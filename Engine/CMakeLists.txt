@@ -19,6 +19,16 @@ add_library(EngineBenchmark STATIC
 add_library(Engine::Benchmark ALIAS EngineBenchmark)
 configure_engine_target(EngineBenchmark)
 
+add_library(EngineMeasurement STATIC
+    Measurement/timing_recorder.cpp
+    Measurement/memory_measurement.cpp
+)
+add_library(Engine::Measurement ALIAS EngineMeasurement)
+configure_engine_target(EngineMeasurement)
+if(WIN32)
+    target_link_libraries(EngineMeasurement PRIVATE psapi)
+endif()
+
 add_library(EngineInput STATIC
     Input/input.cpp
 )
