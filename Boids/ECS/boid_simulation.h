@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Boids/Common/boid_simulation_config.h"
-#include "Boids/ECS/Systems/boid_system.h"
 #include "Engine/ECS/registry.h"
 #include "Engine/ECS/system.h"
 
@@ -25,7 +24,6 @@ class BoidSimulation {
  private:
   boids::BoidSimulationConfig config_;
   engine::ecs::Registry registry_;
-  BoidSystem boid_system_;
   engine::ecs::SystemManager system_manager_;
 };
 

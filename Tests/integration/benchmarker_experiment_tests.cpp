@@ -6,6 +6,11 @@
 #include <stdexcept>
 
 #include "Benchmarker/benchmarker.h"
+#include "Boids/ECS/Components/velocity.h"
+#include "Boids/ECS/Systems/boid_orientation_system.h"
+#include "Boids/ECS/Systems/boid_system.h"
+#include "Boids/ECS/Systems/boundary_system.h"
+#include "Boids/ECS/Systems/movement_system.h"
 #include "Boids/ECS/boid_simulation.h"
 #include "Boids/OOP/boid_simulation.h"
 
@@ -149,6 +154,25 @@ TEST(BenchmarkerExperimentTest,
     }
   }
   EXPECT_TRUE(found_cache);
+  // All four systems are separate manager-owned allocations, including Boid.
+  const std::size_t object_sizes[] = {
+      sizeof(boids::ecs::BoidSystem), sizeof(boids::ecs::MovementSystem),
+      sizeof(boids::ecs::BoundarySystem),
+      sizeof(boids::ecs::BoidOrientationSystem)};
+  for (std::size_t index = 0; index < 4U; ++index) {
+    const std::string name = "systems." + std::to_string(index) + ".object";
+    bool found = false;
+    for (const auto& entry : ecs.storage.entries()) {
+      if (entry.name == name) {
+        found = true;
+        EXPECT_EQ(entry.size_bytes, object_sizes[index]);
+      }
+    }
+    EXPECT_TRUE(found) << name;
+  }
+  const auto& state = ecs.timing.sections[3];
+  EXPECT_EQ(state.calls, 3U);  // One continuous interval per measured step.
+  for (const auto& sample : state.samples) EXPECT_EQ(sample.calls, 1U);
 }
 
 TEST(BenchmarkerExperimentTest, InstrumentationPreservesSimulationState) {

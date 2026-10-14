@@ -47,6 +47,7 @@ set_tests_properties(AppBenchmarkSmoke PROPERTIES RUN_SERIAL TRUE)
 
 add_executable(EngineEcsTests
     unit/registry_tests.cpp
+    unit/system_manager_tests.cpp
     unit/view_tests.cpp
 )
 

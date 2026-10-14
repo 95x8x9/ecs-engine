@@ -84,7 +84,8 @@ report.add_objects<DummyObject>("dummy_objects", dummy_count);
 소유자가 동일한 할당을 서로 다른 이름으로 중복 보고하지 않도록 해야 한다.
 
 현재 OOP는 `vector<BoidObject>`를 보고한다. ECS는 Registry의 Entity 보조 배열과
-component sparse/dense 배열, CachedView, 시스템 포인터 배열과 할당 객체를 보고한다.
+component sparse/dense 배열, CachedView, 시스템 등록 항목 배열과 할당 객체,
+계측 구간 이름 버퍼를 보고한다.
 unordered_map의 payload 이외 node/bucket 저장량은 미지원이므로 ECS 합계는 부분합이다.
 시뮬레이션 객체 자체를 포함하며, 그 안의 컨테이너 제어 필드는 별도로 더하지 않는다.
 
@@ -92,6 +93,46 @@ unordered_map의 payload 이외 node/bucket 저장량은 미지원이므로 ECS 
 호출한다. Windows에서는 Peak Private Commit과 Peak Working Set을 byte 단위로
 반환한다. 다른 OS는 `Unsupported`, OS 조회 실패는 `Failed`와 사유를 반환한다.
 실제 0과 누락은 `std::optional`로 구분한다.
+
+## ECS SystemManager 연결
+
+모든 ECS System은 아래 공통 가상 Update를 구현한다. 기존 두 인자 호출을 노출하려면
+파생 클래스에 `using engine::ecs::System::Update;`를 선언한다. 이 공통 오버로드는
+비활성 recorder로 세 인자 가상 Update를 호출한다.
+
+```cpp
+void Update(engine::ecs::Registry& registry, float dt,
+            engine::measurement::TimingRecorder& timing) override;
+```
+
+SystemManager는 같은 recorder를 모든 System에 전달한다. `Add<SystemType>(args...)`는
+매니저의 자동 구간 계측 없이 System을 등록한다. `AddTimed<SystemType>(name, args...)`는
+매니저가 감쌀 구간 이름도 지정한다. 이름은 매니저가 복사·소유하며 빈 이름은 오류다.
+등록과 Clear는 Update 순회 밖에서 수행해야 한다.
+
+```cpp
+system_manager_.Add<BoidSystem>();
+system_manager_.AddTimed<MovementSystem>("state_update");
+system_manager_.AddTimed<BoundarySystem>("state_update", boundary_half_extent);
+system_manager_.AddTimed<BoidOrientationSystem>("state_update");
+
+system_manager_.Update(registry_, dt, timing);
+```
+
+같은 구간 이름으로 연속 등록된 System들은 하나의 start/stop으로 계측한다.
+다른 구간이나 Add로 등록한 System을 만나면 현재 구간을 종료한다. 이후 같은 구간이
+다시 나타나면 새 구간을 열고 TimingRecorder가 같은 step의 시간을 합산한다.
+따라서 현재 ECS의 `state_update`는 Movement부터 Orientation까지 한 번의 연속 계측이다.
+
+매니저의 두 인자 Update는 비활성 recorder를 사용하는 편의 API다. benchmark/warmup은
+같은 세 인자 API를 사용하고 recorder 활성 상태로 기록 여부를 제어한다.
+
+메모리 보고는 Simulation → SystemManager → 개별 System 순서다. 매니저는 등록 배열과
+구간 이름 버퍼, 실제 파생 타입의 객체 크기를 보고한다. `System::AppendStorageReport`
+기본 구현은 추가 저장소가 없는 경우 아무것도 더하지 않는다. 동적 저장소가 있는 System은
+이를 override하여 별도 할당만 보고한다. BoidSystem은 CachedView 배열을 보고하며 객체
+자체의 `sizeof(BoidSystem)`은 매니저가 이미 더하므로 다시 더하지 않는다. 객체 항목 이름은
+등록 순서에 따라 `systems.<index>.object`다.
 
 ## 실험 실행 및 결과
 

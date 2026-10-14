@@ -8,7 +8,9 @@ class BoundarySystem final : public engine::ecs::System {
  public:
   explicit BoundarySystem(float half_extent);
 
-  void Update(engine::ecs::Registry& registry, float delta_seconds) override;
+  using engine::ecs::System::Update;
+  void Update(engine::ecs::Registry& registry, float delta_seconds,
+              engine::measurement::TimingRecorder& timing) override;
 
  private:
   float half_extent_;

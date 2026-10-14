@@ -11,7 +11,8 @@
 namespace boids::ecs {
 
 void MovementSystem::Update(engine::ecs::Registry& registry,
-                            float delta_seconds) {
+                            float delta_seconds,
+                            engine::measurement::TimingRecorder& /* timing */) {
   registry.CreateView<Velocity, Acceleration>().Each(
       [delta_seconds](Velocity& velocity, const Acceleration& acceleration) {
         velocity.value += acceleration.value * delta_seconds;

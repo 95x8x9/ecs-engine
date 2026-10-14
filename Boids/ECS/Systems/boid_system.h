@@ -14,10 +14,11 @@ namespace boids::ecs {
 
 class BoidSystem final : public engine::ecs::System {
  public:
-  void Update(engine::ecs::Registry& registry, float delta_seconds) override;
+  using engine::ecs::System::Update;
   void Update(engine::ecs::Registry& registry, float delta_seconds,
-              engine::measurement::TimingRecorder& timing);
-  void AppendStorageReport(engine::measurement::StorageReport& report) const;
+              engine::measurement::TimingRecorder& timing) override;
+  void AppendStorageReport(
+      engine::measurement::StorageReport& report) const override;
 
  private:
   using NeighborView =

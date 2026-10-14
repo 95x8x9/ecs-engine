@@ -32,9 +32,11 @@ BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
     throw std::invalid_argument("Initial speed cannot be negative");
   }
 
-  system_manager_.Add<MovementSystem>();
-  system_manager_.Add<BoundarySystem>(config_.boundary_half_extent);
-  system_manager_.Add<BoidOrientationSystem>();
+  system_manager_.Add<BoidSystem>();
+  system_manager_.AddTimed<MovementSystem>("state_update");
+  system_manager_.AddTimed<BoundarySystem>("state_update",
+                                           config_.boundary_half_extent);
+  system_manager_.AddTimed<BoidOrientationSystem>("state_update");
 }
 
 // Initalize entities to simulation
@@ -88,22 +90,14 @@ void BoidSimulation::Update(float delta_seconds,
   }
   // Dummy churn is not implemented yet; current entity changes require no work.
   timing.record_zero("entity_changes");
-  boid_system_.Update(registry_, delta_seconds, timing);
-
-  timing.start("state_update");
-  system_manager_.Update(registry_, delta_seconds);
-  timing.stop("state_update");
+  system_manager_.Update(registry_, delta_seconds, timing);
 }
 
 engine::measurement::StorageReport BoidSimulation::GetStorageReport() const {
   engine::measurement::StorageReport report;
   report.add_objects<BoidSimulation>("simulation.object", 1U);
   registry_.AppendStorageReport(report);
-  boid_system_.AppendStorageReport(report);
   system_manager_.AppendStorageReport(report);
-  report.add_objects<MovementSystem>("systems.movement", 1U);
-  report.add_objects<BoundarySystem>("systems.boundary", 1U);
-  report.add_objects<BoidOrientationSystem>("systems.orientation", 1U);
   return report;
 }
 

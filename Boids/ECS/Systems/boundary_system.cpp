@@ -16,7 +16,8 @@ BoundarySystem::BoundarySystem(float half_extent) : half_extent_(half_extent) {
 }
 
 void BoundarySystem::Update(engine::ecs::Registry& registry,
-                            float /* delta_seconds */) {
+                            float /* delta_seconds */,
+                            engine::measurement::TimingRecorder& /* timing */) {
   registry.CreateView<engine::renderer::Transform, Velocity>().Each(
       [this](engine::renderer::Transform& transform, Velocity& velocity) {
         for (int axis = 0; axis < 3; ++axis) {

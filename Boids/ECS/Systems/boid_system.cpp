@@ -41,12 +41,6 @@ glm::vec3 CalculateAlignment(const glm::vec3& velocity_sum,
 
 }  // namespace
 
-void BoidSystem::Update(engine::ecs::Registry& registry, float delta_seconds) {
-  engine::measurement::TimingRecorder disabled;
-  disabled.set_enabled(false);
-  Update(registry, delta_seconds, disabled);
-}
-
 void BoidSystem::Update(engine::ecs::Registry& registry,
                         float /* delta_seconds */,
                         engine::measurement::TimingRecorder& timing) {

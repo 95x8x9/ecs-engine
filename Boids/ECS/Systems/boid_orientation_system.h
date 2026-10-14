@@ -6,7 +6,9 @@ namespace boids::ecs {
 
 class BoidOrientationSystem final : public engine::ecs::System {
  public:
-  void Update(engine::ecs::Registry& registry, float delta_seconds) override;
+  using engine::ecs::System::Update;
+  void Update(engine::ecs::Registry& registry, float delta_seconds,
+              engine::measurement::TimingRecorder& timing) override;
 };
 
 }  // namespace boids::ecs
