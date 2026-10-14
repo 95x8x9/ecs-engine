@@ -11,12 +11,18 @@
 | `Boids/Common/` | 공통 초기 설정과 `BoidParameters` |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
+| `Benchmarker/` | 초기화·warmup·고정 dt 측정 반복, 환경 수집과 결과 직렬화 |
 | `App/` | 실행 옵션, 구현 선택, 콜백 연결과 결과 출력 |
 
 `App`은 Engine과 Boids를 조립한다. Boids 행동은 `Boids`에 두고,
 Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 수행하지 않는다.
 `Boids::Common`은 Engine에 의존하지 않으며, OOP는 `Engine::ECS`에 의존하지 않는다.
 두 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
+
+`Benchmarker::Experiment`는 실험 실행 함수를 제공한다. App은 구현을 선택하고 이
+함수를 호출한다. 이 함수가 Boids를 직접 실행하며, Engine에는 콜백이나 시뮬레이션
+타입을 전달하지 않는다. `Engine::Measurement`는 시간·메모리 계측 API만 제공한다.
+Boids와 ECS 저장소는 이 API로 구간을 기록하고 소유한 저장량을 보고한다.
 
 ## 데이터와 저장 방식
 
@@ -35,16 +41,38 @@ CachedView의 개체·dense index를 재사용한다. 값 변경은 그대로 �
 
 Headless 벤치마크는 다음 순서로 실행한다.
 
-1. App이 옵션을 읽고 ECS 또는 OOP 시뮬레이션을 생성·초기화한다.
-2. Engine::Benchmark가 고정 dt로 Update 콜백을 호출하여 warmup을 수행한다.
-3. 지정한 step 수만큼 같은 콜백을 호출하고 실행 시간을 측정한다.
-4. App이 설정과 총·평균 갱신 시간, updates/s를 출력한다.
+1. App이 옵션을 읽고 `Benchmarker::Experiment`의 실행 함수를 선택한다.
+2. 실행 함수가 환경 정보를 수집하고, 시뮬레이션을 생성한 뒤 `Initialize()`를 계측한다.
+   생성자와 계측 도구 준비는 초기화 시간에서 제외된다.
+3. 계측을 비활성화한 채 고정 dt로 warmup을 실행한다.
+4. step별 기록 공간을 미리 할당하고 `begin_step_measurement/end_step_measurement` 사이에서 Update를 호출한다.
+   Boids는 `start/stop`으로 조회 준비·이웃 계산·상태 갱신을 계측한다.
+5. 마지막 step 이후 프로세스 최대 메모리를 먼저 조회하고, 시뮬레이션 종료 전
+   컨테이너 저장량과 시간 결과를 수집한다.
+6. App이 CSV 원자료를 저장하고 설정·환경·시간·메모리 요약을 출력한다.
 
 두 구현은 같은 seed와 설정으로 초기화하고 naive all-pairs 이웃 탐색을 사용한다.
 한 step은 모든 Boid의 가속도 계산 → 속도·위치 갱신 → 경계 처리 → 방향 갱신 순서다.
-ECS는 SystemManager에 등록된 System 순서로, OOP는 객체 메서드의 반복 호출로 수행한다.
+ECS는 BoidSystem의 조회 준비·이웃 계산 이후 SystemManager에 등록된
+Movement·Boundary·Orientation 순서로, OOP는 객체 메서드의 반복 호출로 수행한다.
 이웃 계산에는 모든 Boid의 갱신 전 위치·속도를 사용한다.
 
-계측은 Update 콜백 호출을 감싸며 초기화·warmup·출력은 제외한다.
+전체 step 계측은 Update 호출을 감싸며 초기화·warmup·출력은 제외한다.
+구간 시간과 별도로 측정하고 구간 계측 비용을 포함한다. 원자료 복사·집계는 step
+경계 밖에서 수행한다. 현재 Dummy 변경은 구현되지 않아 개체 변경 구간을 명시적
+0으로 기록한다. OOP는 별도 조회 준비가 없어 해당 구간도 명시적 0으로 기록한다.
+
+저장량은 시뮬레이션 객체 자체와 소유한 배열·개별 할당 객체의 size/capacity 기반
+추정치다. ECS의 alive/generation/free ID 배열, component sparse/dense 배열과
+CachedView를 포함한다. OOP의 현재 값 배열은 객체 데이터를 한 번만 계산한다.
+unordered_map의 항목 payload는 계산하지만 구현별 node 링크·bucket 저장량은
+미지원으로 표시하며 ECS 합계는 알려진 항목의 부분합이다. allocator overhead와
+fragmentation은 추정에 포함하지 않는다. 프로세스 최대값에는 계측 버퍼와 warmup도
+포함되며, 조회 시점까지의 프로세스 전체 수명에 대한 값이다.
+
+현재 비교 실행은 Boid 전용 ECS/OOP이며 연구 요구사항의 Dummy, 상속 기반 OOP,
+Archetype은 아직 구현되지 않았다. 계측 API 계약과 연결 예시는
+[벤치마크 API](benchmarker-api.md)를 참고한다.
+
 Headless 경로는 그래픽 초기화를 수행하지 않는다. 기존 시각화는 별도로
 Engine::Core의 Application 프레임 루프에서 프레임별 dt를 사용한다.

@@ -93,11 +93,12 @@ Boids는 이 런타임 위에서 실행되는 연구용 시뮬레이션이다. �
 | --- | --- |
 | 언어·빌드 | C++20, CMake, Visual Studio 2022 기본 검증, Release 성능 측정 |
 | 의존성 | vcpkg 사용, 연구에 필요한 의존성만 추가 |
-| `Engine/` | ECS, CPU 상태 데이터와 Benchmark 등 재사용 런타임 |
+| `Engine/` | ECS, CPU 상태 데이터와 계측 도구 등 재사용 런타임 |
 | `Boids/Common/` | 공통 설정과 `BoidParameters`; Engine/ECS에 의존하지 않음 |
 | `Boids/OOP/` | 상속 기반 객체 시뮬레이션; `Engine/ECS`에 의존하지 않음 |
 | `Boids/ECS/` 및 Archetype 구현 | ECS 기반 저장·시스템과 연구 도메인 행동 |
 | `App/` | 구현 선택, 콜백 연결, 옵션·출력을 담당하는 얇은 조립 계층 |
+| `Benchmarker/` | 실험 실행 순서와 결과 수집·직렬화; Boids를 직접 실행하고 Engine 계측 API 사용 |
 
 `Engine`에 Boids 행동을 넣지 않는다. `App`에 ECS 쿼리나 Boids 시스템을 구현하지
 않는다. 위치·회전·크기 데이터와 관련 계산 코드는 OpenGL 렌더링 코드와 분리한다. 시뮬레이션에서는 GLM 수학 라이브러리만 사용하는 Engine::RenderData Cmake 빌드 타겟을 통해 이를 사용한다. 시뮬레이션에 OpenGL 실행 의존성을 추가하지 않는다.

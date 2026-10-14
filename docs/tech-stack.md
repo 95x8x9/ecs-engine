@@ -41,7 +41,15 @@ Headless 실행은 창과 OpenGL 컨텍스트를 초기화하지 않고 CPU 시�
 
 CPU Transform 계산은 GLM에만 의존하는 `Engine::RenderData` 타깃으로 분리되어 있다.
 Boids는 이 타깃을 사용하며 OpenGL 렌더링 모듈에 의존하지 않는다.
-공통 계측은 `Engine::Benchmark`에서 `std::chrono::steady_clock`과 콜백으로 수행한다.
+공통 계측은 `Engine::Measurement`에서 `std::chrono::steady_clock`과 이름별
+`start/stop` API로 수행한다. Windows 프로세스 최대 메모리는 PSAPI의
+`GetProcessMemoryInfo`로 수집한다. Windows 헤더는 구현 파일에만 포함하고
+`psapi` 시스템 라이브러리를 링크한다.
+
+`Benchmarker::Experiment`는 콜백 없이 Boids의 실행 API를 직접 호출하는 별도
+모듈이다. CPU·OS 정보는 Windows Registry API로 읽으며 `advapi32` 시스템
+라이브러리를 링크한다. 추가 vcpkg 패키지는 없다. 현재 실행 진입점은 App의
+`--benchmark`이며 step별 시간과 설정·환경·메모리 원자료를 CSV로 저장한다.
 
 모듈 경계는 [아키텍처](architecture.md), 연구 범위와 측정 기준은
 [연구·실험·논문 기준](research-goals.md)을 따른다.

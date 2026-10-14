@@ -29,17 +29,20 @@ clangd 사용 시 파일 배치나 CMake 구성을 변경한 뒤 `cmake --preset
 
 ```powershell
 cmake --build --preset vs2022-release
-.\build\vs2022\App\Release\App.exe --benchmark --implementation ecs --agents 1000 --seed 42
+.\build\vs2022\App\Release\App.exe --benchmark --implementation ecs --agents 1000 --seed 42 --output out/ecs.csv
 .\build\vs2022\App\Release\App.exe --benchmark --implementation oop --agents 1000 --seed 42
 .\build\vs2022\App\Release\App.exe --help
 ```
 
 `--help`에서 전체 옵션을 확인할 수 있습니다. 옵션 없이 실행하면 기존 3D 시각화가 열립니다.
+원자료는 `--output`으로 지정한 CSV에 저장하며, 생략하면 `out/benchmarks/`에 실행별로
+저장합니다. 벤치마크 실행은 한 번에 하나씩 수행합니다.
 
 ## 구조
 
 - `Engine/`: ECS, 공통 런타임과 벤치마크 지원
 - `Boids/`: 공통 설정과 Boids 시뮬레이션 구현
+- `Benchmarker/`: 실험 실행, 환경 수집과 결과 저장 형식
 - `App/`: 실행 옵션, 모듈 연결과 결과 출력
 - `Tests/`: 검증 테스트
 
@@ -48,5 +51,6 @@ cmake --build --preset vs2022-release
 - [연구·실험·논문 기준](docs/research-goals.md)
 - [아키텍처와 모듈 경계](docs/architecture.md)
 - [기술 스택과 의존성](docs/tech-stack.md)
+- [벤치마크 API 사용법](docs/benchmarker-api.md)
 
 구현 작업과 진행 상태는 GitHub 이슈에서 관리합니다.
