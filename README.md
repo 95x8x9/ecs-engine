@@ -1,146 +1,52 @@
 # ECS Engine
 
-ECS 기반 경량 게임 엔진 프로토타입 졸업 프로젝트입니다. 현재 개발 환경은 C++20, OpenGL 3.3 Core Profile, GLFW, GLAD, CMake, vcpkg 기준으로 구성되어 있습니다.
+C++20 기반 ECS 경량 게임 엔진 프로토타입을 만드는 졸업 연구 프로젝트입니다.
+고정 시간 간격으로 실행하는 단일 스레드 headless 3D Boids 시뮬레이션에서
+OOP, Sparse Set ECS, Archetype ECS의 저장·조회 비용과 성능을 비교하는 것이 목표입니다.
 
-본 프로젝트는 범용 3D 게임 엔진 전체를 구현하는 것이 아니라, ECS와 데이터 지향 설계의 성능 특성을 검증하기 위한 단순화된 3D Boids 시뮬레이션 환경을 갖춘 경량 게임 엔진 프로토타입을 구현하는 것을 목표로 합니다.
+연구는 동일한 naive all-pairs 이웃 탐색을 기준으로 Boid·Dummy 수와 Dummy
+삭제·재생성 비율에 따른 실행 시간·메모리 비용을 비교합니다. 렌더링 확장과
+렌더링 성능 측정은 연구 범위에서 제외하며, 기존 그래픽 코드와 의존성은 유지합니다.
 
-## Engine Definition
+## 빌드
 
-이 프로젝트에서의 게임 엔진은 Unity나 Unreal Engine 같은 범용 제작 도구가 아니라, 실시간 게임 실행 환경을 구성하는 최소 런타임 계층을 의미합니다.
-
-최종 구현·연구 범위:
-
-- 시뮬레이션 실행·수명 관리와 update loop
-- Fixed timestep 관리
-- World 및 ECS 기반 객체 관리
-- Simulation update
-- Headless benchmark와 시간·메모리 측정
-
-Boids 시뮬레이션은 위 런타임 계층에서 headless로 실행하여 세 저장 구조를 비교합니다.
-렌더링 추가 구현과 시각화·FPS·프레임·렌더 CPU/GPU 시간 측정은 프로젝트 완료 및
-논문 범위에서 제외합니다. 기존 그래픽 코드와 빌드 의존성은 유지합니다.
-
-## Tech Stack
-
-- Language: C++20
-- Existing graphics dependencies: OpenGL 3.3 Core Profile, GLFW, vendored GLAD
-- Build System: CMake
-- Dependency Management: vcpkg + vendored GLAD
-
-## Research Scope
-
-- 3D 공간 기반 Boids 군집 시뮬레이션
-- OOP, Sparse Set ECS와 Archetype ECS의 성능 비교
-- 동일한 naive all-pairs 이웃 탐색을 사용한 저장 구조 비교
-- Boid와 Dummy를 함께 저장하고 Dummy 삭제·재생성에 따른 저장 구조 변경 비용 비교
-
-범위 밖 항목:
-
-- 공통 시각화 추가 구현 및 FPS·프레임·렌더링 성능 계측
-- 범용 3D 모델 로딩
-- PBR 및 고급 조명 시스템
-- 애니메이션 시스템
-- 물리 엔진
-- 씬 에디터
-
-## Research Guide
-
-팀의 연구 방향, 실험·분석 절차와 논문 완료 기준은
-[졸업 연구·실험·논문 통합 계획](docs/research-goals.md)에서 함께 관리합니다.
-논문 제출까지 이 문서를 기준으로 진행하며 목차에서 필요한 항목을 찾을 수 있습니다.
-
-## Prerequisites
-
-- CMake 3.20+
-- Visual Studio 2022 또는 2026 C++ workload
-- vcpkg
-- `VCPKG_ROOT` environment variable
-
-## Build
+필수 환경: CMake 3.20+, Visual Studio 2022 C++ 워크로드, vcpkg와 `VCPKG_ROOT` 환경 변수.
 
 ```powershell
 cmake --preset vs2022
 cmake --build --preset vs2022-debug
 ```
 
-Visual Studio 2026을 사용한다면 다음 명령을 사용할 수 있습니다.
+실행 파일: `build/vs2022/App/Debug/App.exe`
 
-```powershell
-cmake --preset vs2026
-cmake --build --preset vs2026-debug
-```
+clangd 사용 시 파일 배치나 CMake 구성을 변경한 뒤 `cmake --preset clangd`로
+`build/clangd/compile_commands.json`을 갱신합니다.
 
-빌드 후 실행 파일은 `build/<preset>/App/Debug/App.exe` 아래에 생성됩니다.
+## 실행
 
-VS Code의 clangd는 별도의 컴파일 정보인 `build/clangd/compile_commands.json`을
-사용합니다. 파일을 이동하거나 CMake의 소스 목록·헤더 경로·의존성을 변경했다면
-다음 명령으로 편집기 정보도 갱신합니다.
-
-```powershell
-cmake --preset clangd
-```
-
-갱신 후에도 이전 오류 표시가 남으면 명령 팔레트에서
-`clangd: Restart language server`를 실행합니다.
-
-## Run and Benchmark
-
-연구 실행에는 `--benchmark`를 사용합니다. 성능 측정은 Release 빌드를 사용합니다.
+성능 측정은 Release 빌드에서 `--benchmark`로 실행합니다.
+현재 실행 옵션은 `ecs`(Sparse Set)와 `oop`를 지원합니다.
 
 ```powershell
 cmake --build --preset vs2022-release
+.\build\vs2022\App\Release\App.exe --benchmark --implementation ecs --agents 1000 --seed 42
+.\build\vs2022\App\Release\App.exe --benchmark --implementation oop --agents 1000 --seed 42
 .\build\vs2022\App\Release\App.exe --help
 ```
 
-실험 설정은 구현, Boid·Dummy 수, step당 Dummy 삭제·재생성 비율, seed, dt,
-warmup·측정 step 수를 포함합니다. 한 실행에서 전체 step 시간, 개체 변경·조회 준비·
-이웃 계산·상태 갱신 시간과 메모리 지표를 함께 수집합니다. 설정·측정 범위와 재현 기준은
-[졸업 논문 통합 계획](docs/research-goals.md)을 따릅니다.
+`--help`에서 전체 옵션을 확인할 수 있습니다. 옵션 없이 실행하면 기존 3D 시각화가 열립니다.
 
-## Project Layout
+## 구조
 
-```text
-ECS-engine/
-├─ CMakeLists.txt
-├─ CMakePresets.json
-├─ vcpkg.json
-├─ README.md
-├─ docs/
-│  ├─ tech-stack.md
-│  ├─ research-goals.md
-│  └─ architecture.md
-├─ Engine/
-│  ├─ Core/
-│  ├─ Benchmark/
-│  ├─ ECS/
-│  ├─ ECSRenderer/
-│  ├─ Renderer/
-│  ├─ Input/
-│  └─ DebugUI/
-├─ Boids/
-│  ├─ Common/
-│  ├─ ECS/
-│  └─ OOP/
-├─ App/
-│  ├─ main.cpp
-│  └─ UI/
-├─ Tests/
-└─ third_party/
-   └─ glad/
-```
+- `Engine/`: ECS, 공통 런타임과 벤치마크 지원
+- `Boids/`: 공통 설정과 Boids 시뮬레이션 구현
+- `App/`: 실행 옵션, 모듈 연결과 결과 출력
+- `Tests/`: 검증 테스트
 
-`Engine`은 공통 런타임·Renderer·ECS를 제공하고, `Boids`는 연구 도메인의
-ECS와 OOP 시뮬레이션을 포함합니다. `App`은 두 모듈을 조립해 실행하는 얇은
-계층입니다.
-기존 Renderer와 ECSRenderer는 저장소에 남아 있지만, OOP/Archetype 렌더 어댑터와
-공통 시각화 경로를 추가하는 작업은 완료 범위에서 제외합니다.
+## 문서
 
-`Boids/Common`은 공통 설정과 `BoidParameters`를 제공합니다. `Boids/ECS`는
-컴포넌트와 시스템으로 시뮬레이션을 구현하고, `Boids/OOP`는 공통 부모에서 Boid와
-Dummy를 상속하는 객체 구조를 사용합니다. OOP는 두 종류를 같은 부모 포인터 배열에
-저장하며, 비교 구현은 동일한 초기 조건·Dummy 변경 계획과 측정 기준을 사용합니다.
+- [연구·실험·논문 기준](docs/research-goals.md)
+- [아키텍처와 모듈 경계](docs/architecture.md)
+- [기술 스택과 의존성](docs/tech-stack.md)
 
-Engine·Boids·App은 기능별 폴더에 `.h`와 `.cpp`를 함께 배치합니다.
-예를 들어 `Engine/Core/application.h`와 `Engine/Core/application.cpp`가 한 폴더에
-있습니다. CMake의 헤더 검색 경로는 프로젝트 루트이므로
-`#include "Engine/Core/application.h"`처럼 모듈 이름을 포함해 사용합니다.
+구현 작업과 진행 상태는 GitHub 이슈에서 관리합니다.

@@ -1,58 +1,50 @@
 # 아키텍처
 
-## 모듈 책임
+이 문서는 현재 코드의 모듈 경계, 저장 방식과 실행 흐름을 설명한다.
+연구에서 요구하는 비교 구조와 실험 기준은 [연구·실험·논문 기준](research-goals.md)을 따른다.
 
-이 문서는 headless 3D Boids 비교 연구의 설계 기준을 설명한다.
+## 모듈 책임과 의존 관계
 
-- `Engine`: 개체 생성·삭제, ECS 저장·조회, CPU 상태 데이터와 공통 계측 지원
-- `Boids`: 공통 설정, OOP·Sparse Set·Archetype 시뮬레이션과 Dummy 변경
-- `App`: 실행 설정, 시뮬레이션 연결, 실험 실행과 결과 출력·저장
+| 모듈 | 책임 |
+| --- | --- |
+| `Engine/` | ECS 저장·조회, CPU Transform 계산, 공통 벤치마크와 기존 그래픽 런타임 |
+| `Boids/Common/` | 공통 초기 설정과 `BoidParameters` |
+| `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
+| `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
+| `App/` | 실행 옵션, 구현 선택, 콜백 연결과 결과 출력 |
 
-의존 방향은 `App → Engine`, `App → Boids`, `Boids → Engine`이다.
-Engine에 Boids 행동을 넣지 않고 App에 ECS 조회나 Boids 계산을 넣지 않는다.
-OOP 구현은 `Engine/ECS`에 의존하지 않는다.
-
-Engine·Boids·App은 기능별 폴더에 헤더와 소스를 함께 둔다. CMake 타깃은 프로젝트
-루트를 include 경로로 사용하며 모듈 이름을 포함한 include를 유지한다.
+`App`은 Engine과 Boids를 조립한다. Boids 행동은 `Boids`에 두고,
+Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 수행하지 않는다.
+`Boids::Common`은 Engine에 의존하지 않으며, OOP는 `Engine::ECS`에 의존하지 않는다.
+두 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
 
 ## 데이터와 저장 방식
 
-공통 설정과 `BoidParameters`는 Engine에 의존하지 않는 `Boids/Common`에 둔다.
-Boid는 Transform, Velocity, Acceleration과 BoidParameters를 가지며, Dummy는
-Transform과 Velocity만 가진다. Dummy는 모든 Boids 계산과 이웃 탐색에서 제외한다.
+- Sparse Set ECS: Registry가 개체 수명과 타입별 ComponentStorage를 소유한다.
+  컴포넌트는 dense 배열에 저장하고, sparse index로 개체와 배열 위치를 연결한다.
+  삭제 시 마지막 원소를 옮기고 index를 갱신한다.
+- OOP: BoidSimulation이 `std::vector<BoidObject>`에 객체를 값으로 소유한다.
+  각 객체가 Transform, 속도, 가속도와 BoidParameters를 보관한다.
 
-- OOP: 공통 부모 SimulationObject에서 BoidObject와 DummyObject를 상속하고,
-  `std::vector<std::unique_ptr<SimulationObject>>`에 함께 저장한다.
-  부모는 Transform·Velocity, BoidObject는 추가로 Acceleration·BoidParameters를 가진다.
-- Sparse Set: 타입별 component 배열과 sparse/dense index를 사용한다.
-- Archetype: Boid와 Dummy의 component 조합별 column 배열을 사용한다.
+두 구현은 기존 시각화용 MeshRenderer 데이터도 보관한다.
+ECS의 View는 필요한 컴포넌트 조합을 조회하며, BoidSystem은 이웃 반복 조회에
+CachedView의 개체·dense index를 재사용한다. 값 변경은 그대로 반영되고,
+관련 저장 구조가 바뀌면 사용 전에 캐시를 갱신한다. 순회 중에는 구조를 변경하지 않는다.
 
-위치·회전·크기와 CPU 계산 함수는 GLM만 사용하는 `Engine::RenderData`를 사용한다.
-렌더링 추가 구현과 성능 측정은 연구 범위에서 제외한다.
+## 실행 흐름
 
-## 한 step의 처리
+Headless 벤치마크는 다음 순서로 실행한다.
 
-1. 개체 변경: 실행 비율에 따라 Dummy를 삭제하고 같은 수·구성으로 재생성
-2. 조회 준비: 구조 변경을 확인하고 필요한 대상 목록·index 캐시 갱신
-3. 이웃 계산: 모든 Boid의 갱신 전 상태로 가속도 계산
-4. 상태 갱신: 속도 반영·제한, 위치 적분, 경계 처리와 방향 갱신
+1. App이 옵션을 읽고 ECS 또는 OOP 시뮬레이션을 생성·초기화한다.
+2. Engine::Benchmark가 고정 dt로 Update 콜백을 호출하여 warmup을 수행한다.
+3. 지정한 step 수만큼 같은 콜백을 호출하고 실행 시간을 측정한다.
+4. App이 설정과 총·평균 갱신 시간, updates/s를 출력한다.
 
-조회 준비에는 각 구현에서 실제로 필요한 작업만 포함한다. Sparse Set의 CachedView는
-component 값 변경과 저장 구조 변경을 구분하며, 구조 변경 후 사용 전에 갱신한다.
-순회 중에는 개체 생성·삭제나 component 추가·삭제를 수행하지 않는다.
+두 구현은 같은 seed와 설정으로 초기화하고 naive all-pairs 이웃 탐색을 사용한다.
+한 step은 모든 Boid의 가속도 계산 → 속도·위치 갱신 → 경계 처리 → 방향 갱신 순서다.
+ECS는 SystemManager에 등록된 System 순서로, OOP는 객체 메서드의 반복 호출로 수행한다.
+이웃 계산에는 모든 Boid의 갱신 전 위치·속도를 사용한다.
 
-각 구현은 같은 seed·생성 순서·논리적 Dummy 삭제 계획과 fixed timestep을 사용한다.
-삭제로 배열 위치가 바뀌어도 Boid 데이터와 대응 관계를 유지한다.
-`max_alignment_force`는 가중치 적용 전 Alignment 조향력만 제한한다.
-
-## 계측 경계
-
-전체 step 시간과 네 구간 시간은 같은 실행에서 측정한다. 전체 시간은 네 구간과
-계측 비용을 포함한다. 초기화·warmup·결과 출력은 측정 step에서 제외한다.
-시간 측정 종료 후 프로세스 최대 메모리와 컨테이너 저장량을 함께 기록한다.
-
-Engine은 공통 timer와 측정 결과 구조를 제공하고, Boids는 네 처리 구간의 경계를
-제공한다. App은 실행 파라미터와 결과 저장·분석을 연결한다. 계층 간 형식은
-합의하되 구체적인 구현 작업·진행 상태는 GitHub 이슈에서 관리한다.
-
-실험 조건·측정 정의·검증 기준은 [졸업 논문 통합 계획](research-goals.md)을 따른다.
+계측은 Update 콜백 호출을 감싸며 초기화·warmup·출력은 제외한다.
+Headless 경로는 그래픽 초기화를 수행하지 않는다. 기존 시각화는 별도로
+Engine::Core의 Application 프레임 루프에서 프레임별 dt를 사용한다.
