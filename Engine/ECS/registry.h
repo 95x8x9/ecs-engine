@@ -28,6 +28,8 @@ class Registry {
  public:
   Registry() = default;
 
+  void AppendStorageReport(measurement::StorageReport& report) const;
+
   [[nodiscard]] Entity Create() {
     Entity::IdType entity_id;
 
@@ -358,12 +360,17 @@ class CachedView {
 
   [[nodiscard]] std::size_t Size() const noexcept { return entries_.size(); }
 
+  void AppendStorageReport(measurement::StorageReport& report,
+                           std::string_view name) const {
+    report.add_vector(name, entries_);
+  }
+
   template <typename Function>
   // Expose the neighbor loop to the optimizer while retaining validity checks.
 #if defined(_MSC_VER)
   __forceinline
 #endif
-  void Each(Function&& function) {
+      void Each(Function&& function) {
     if (registry_ == nullptr || !IsCurrent(*registry_)) {
       throw std::logic_error(
           "CachedView was invalidated by a structural registry change");

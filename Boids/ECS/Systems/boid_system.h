@@ -7,6 +7,7 @@
 #include "Boids/ECS/Components/velocity.h"
 #include "Engine/ECS/entity.h"
 #include "Engine/ECS/system.h"
+#include "Engine/Measurement/timing_recorder.h"
 #include "Engine/Renderer/transform.h"
 
 namespace boids::ecs {
@@ -14,6 +15,9 @@ namespace boids::ecs {
 class BoidSystem final : public engine::ecs::System {
  public:
   void Update(engine::ecs::Registry& registry, float delta_seconds) override;
+  void Update(engine::ecs::Registry& registry, float delta_seconds,
+              engine::measurement::TimingRecorder& timing);
+  void AppendStorageReport(engine::measurement::StorageReport& report) const;
 
  private:
   using NeighborView =

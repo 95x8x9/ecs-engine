@@ -40,6 +40,10 @@ class SystemManager {
 
   [[nodiscard]] std::size_t Size() const { return systems_.size(); }
 
+  void AppendStorageReport(measurement::StorageReport& report) const {
+    report.add_vector("systems.pointers", systems_);
+  }
+
  private:
   std::vector<std::unique_ptr<System>> systems_;
 };

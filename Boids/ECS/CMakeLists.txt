@@ -19,6 +19,7 @@ target_link_libraries(BoidsECS
     PUBLIC
         Boids::Common
         Engine::ECS
+        Engine::Measurement
         Engine::RenderData
         glm::glm
 )
