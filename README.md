@@ -32,6 +32,7 @@ Boids 시뮬레이션은 위 런타임 계층에서 headless로 실행하여 세
 - 3D 공간 기반 Boids 군집 시뮬레이션
 - OOP, Sparse Set ECS와 Archetype ECS의 성능 비교
 - 동일한 naive all-pairs 이웃 탐색을 사용한 저장 구조 비교
+- Boid와 Dummy를 함께 저장하고 Dummy 삭제·재생성에 따른 저장 구조 변경 비용 비교
 
 범위 밖 항목:
 
@@ -44,7 +45,7 @@ Boids 시뮬레이션은 위 런타임 계층에서 headless로 실행하여 세
 
 ## Research Guide
 
-팀의 연구 방향, 구현 로드맵, 실험·분석 절차와 논문 완료 기준은
+팀의 연구 방향, 실험·분석 절차와 논문 완료 기준은
 [졸업 연구·실험·논문 통합 계획](docs/research-goals.md)에서 함께 관리합니다.
 논문 제출까지 이 문서를 기준으로 진행하며 목차에서 필요한 항목을 찾을 수 있습니다.
 
@@ -84,36 +85,17 @@ cmake --preset clangd
 
 ## Run and Benchmark
 
-연구 실행에는 `--benchmark`를 사용합니다. 옵션 없는 기존 ECS 시각화는
-프로젝트 완료·논문 평가 범위에서 제외된 기존 기능입니다.
-
-성능 측정에는 Release 빌드를 사용합니다. `--benchmark`는 창이나 OpenGL
-컨텍스트를 생성하지 않고 선택한 ECS 또는 OOP naive 시뮬레이션만 실행합니다.
+연구 실행에는 `--benchmark`를 사용합니다. 성능 측정은 Release 빌드를 사용합니다.
 
 ```powershell
 cmake --build --preset vs2022-release
-.\build\vs2022\App\Release\App.exe --benchmark --implementation ecs --agents 100 --seed 42 --warmup 100 --steps 1000 --dt 0.016666667
-.\build\vs2022\App\Release\App.exe --benchmark --implementation oop --agents 100 --seed 42 --warmup 100 --steps 1000 --dt 0.016666667
+.\build\vs2022\App\Release\App.exe --help
 ```
 
-`--benchmark`만 지정하면 ECS와 위 기본 조건으로 실행됩니다.
-`--implementation`은 `ecs`와 `oop` 중 하나를 받습니다. `--agents`, `--seed`,
-`--warmup`, `--steps`, `--dt`를 포함한 벤치마크 전용 옵션은 `--help`로 확인할 수
-있습니다. 워밍업은 0도 허용하지만 에이전트 수, 측정 스텝 수와 timestep은
-양수여야 합니다. Boid 행동 파라미터는 `BoidSimulationConfig`의 기본값을 사용하며
-구현명과 실행 조건을 결과에 함께 출력합니다.
-
-`Benchmarker`는 고정 timestep으로 업데이트 콜백을 동기 호출합니다.
-초기화·워밍업·렌더 데이터 추출·UI·결과 출력은 측정에서 제외하고,
-각 업데이트 호출의 경과 시간을 합산해 총 시간과 평균 `ms/step`, `updates/s`를
-콘솔에 출력합니다. 업데이트에는 기존 `BoidOrientationSystem`도 포함됩니다.
-고정 timestep은 가상 시간의 진행량이며 실행 속도를 제한하지 않습니다.
-측정값은 CPU 사용 시간이 아닌 실제 경과 시간으로, 스케줄링 지연과 콜백 호출
-비용을 포함합니다. 반복 호출 시 Benchmarker가 시뮬레이션을 초기화하지는 않습니다.
-
-Archetype 통합, CSV 저장, 자동 반복 실험과 CPU·메모리·캐시 분석은 후속 범위입니다.
-실행 파일은 시각화 모드와 공유하므로 기존 그래픽 라이브러리 빌드/배포 의존성은
-유지되지만, `Engine::Benchmark` 타깃 자체는 표준 C++ 라이브러리만 사용합니다.
+실험 설정은 구현, Boid·Dummy 수, step당 Dummy 삭제·재생성 비율, seed, dt,
+warmup·측정 step 수를 포함합니다. 한 실행에서 전체 step 시간, 개체 변경·조회 준비·
+이웃 계산·상태 갱신 시간과 메모리 지표를 함께 수집합니다. 설정·측정 범위와 재현 기준은
+[졸업 논문 통합 계획](docs/research-goals.md)을 따릅니다.
 
 ## Project Layout
 
@@ -154,9 +136,9 @@ ECS와 OOP 시뮬레이션을 포함합니다. `App`은 두 모듈을 조립해 
 공통 시각화 경로를 추가하는 작업은 완료 범위에서 제외합니다.
 
 `Boids/Common`은 공통 설정과 `BoidParameters`를 제공합니다. `Boids/ECS`는
-컴포넌트와 시스템으로 시뮬레이션을 구현하고, `Boids/OOP`는 연속된 객체 배열과
-객체 메서드로 같은 규칙을 구현합니다. 두 구현은 같은 초기 조건과 공통
-Benchmarker를 사용합니다.
+컴포넌트와 시스템으로 시뮬레이션을 구현하고, `Boids/OOP`는 공통 부모에서 Boid와
+Dummy를 상속하는 객체 구조를 사용합니다. OOP는 두 종류를 같은 부모 포인터 배열에
+저장하며, 비교 구현은 동일한 초기 조건·Dummy 변경 계획과 측정 기준을 사용합니다.
 
 Engine·Boids·App은 기능별 폴더에 `.h`와 `.cpp`를 함께 배치합니다.
 예를 들어 `Engine/Core/application.h`와 `Engine/Core/application.cpp`가 한 폴더에

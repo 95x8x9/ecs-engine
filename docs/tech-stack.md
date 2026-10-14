@@ -34,17 +34,13 @@ GLFW와 Dear ImGui는 vcpkg 매니페스트(`vcpkg.json`)로 관리한다. Dear 
 ## Headless Runtime Scope
 
 - OOP / Sparse Set / Archetype 구현 선택과 공통 초기 조건
+- Boid·Dummy 수와 step당 Dummy 삭제·재생성 비율을 지정하는 실행 설정
 - Fixed timestep 기반 simulation update
-- 전체·phase별 update 및 초기화 시간·메모리 측정
+- 전체 step과 개체 변경·조회 준비·이웃 계산·상태 갱신 시간, 초기화·메모리 측정
 - 독립 프로세스 반복 실행, 원자료·환경 metadata 보존과 통계 분석
 
-`Engine::Benchmark`는 `std::chrono::steady_clock`과 업데이트 콜백을 사용하는
-표준 C++ 전용 타깃이다. 벤치마크 모드에서는 GLFW/OpenGL/ImGui를 초기화하지
-않는다. 실행 파일은 시각화 모드와 공유하므로 기존 링크 의존성은 유지한다.
-
-런타임 코드는 `Engine`, 연구 도메인은 `Boids`, 실행 조립은 `App` CMake 타깃으로
-분리한다. ECS 렌더 어댑터는 별도 `Engine::ECSRenderer` 타깃이며 공통
-`Engine::Renderer`는 ECS에 의존하지 않는다.
+공통 benchmark 코드는 표준 C++ 시간 측정과 콜백을 사용하며 ECS나 Boids 구현에
+의존하지 않는다. Headless 실행은 그래픽 초기화·호출을 수행하지 않는다.
 
 Transform과 MeshRenderer 등 공통 렌더 데이터는 `Engine/Renderer/`와
 `engine::renderer` namespace에 둔다. GLM만 사용하는 `Engine::RenderData`
@@ -52,7 +48,8 @@ Transform과 MeshRenderer 등 공통 렌더 데이터는 `Engine/Renderer/`와
 
 `Boids/Common`은 Engine 의존성이 없는 헤더 전용 `Boids::Common` 타깃으로
 공통 설정과 행동 매개변수를 제공한다. `Boids/ECS`와 `Boids/OOP`가 이를 사용하며,
-OOP는 연속 객체 배열로 같은 규칙을 구현한다.
+OOP는 공통 부모에서 Boid와 Dummy를 상속하며, 같은 부모 포인터 배열에서
+`unique_ptr`로 객체 수명을 관리한다.
 
 Engine·Boids·App은 기능별 폴더에 헤더와 소스를 함께 배치한다. 각 타깃의
 헤더 검색 경로는 `${PROJECT_SOURCE_DIR}`이며, 기존 모듈 이름을 포함한
@@ -60,7 +57,6 @@ include 경로와 CMake 타깃 간 의존 관계를 유지한다.
 
 ## Existing Graphics Modules
 
-현재 ECS 시각화·카메라·instancing·UI와 그래픽 의존성은 기존 구현으로 유지한다.
-공통 OOP/Archetype 시각화, 렌더 어댑터 추가, FPS·frame·render CPU/GPU 계측은
-후속 구현 목표에서 제외한다. Headless 실험에서 그래픽 초기화·호출을 수행하지 않는다.
+그래픽 코드는 연구·구현 범위에서 제외하며 빌드 의존성은 유지한다.
+Headless 실험에서 그래픽 초기화·호출을 수행하지 않는다.
 완료 범위와 실험 절차는 [졸업 논문 통합 계획](research-goals.md)을 따른다.

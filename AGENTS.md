@@ -1,8 +1,8 @@
 # AGENTS.md
 
-## Implementation Checklist
+## Research Reference
 
-Use [GitHub issue #30](https://github.com/learncold/ecs-engine/issues/30) as the progress checklist for completing the project. Follow its ordered issues and verify each issue's completion criteria before marking it done.
+Use `docs/research-goals.md` for research scope, experiment conditions, measurement definitions, and thesis criteria. Manage implementation tasks and progress in GitHub issues; do not put implementation status, roadmaps, or issue order in the research documents.
 
 ## Project Overview
 
@@ -112,7 +112,7 @@ In `Engine/`, `Boids/`, and `App/`, keep related `.h` and `.cpp` files together 
 
 ## Docs Folder
 
-`docs/research-goals.md` is the single team reference for the graduation research through thesis submission. It consolidates the research goals and former research direction/paper plan, including scope, research questions, the issue #30 roadmap, experiment and reproduction procedures, metrics, analysis, thesis structure, and completion criteria. Update it when research decisions, adopted implementations, experiment settings, or verified progress change; do not maintain a separate research plan. Track implementation status in GitHub issues.
+`docs/research-goals.md` is the single team reference for the graduation research through thesis submission. It consolidates the research goals and former research direction/paper plan, including scope, research questions, experiment and reproduction procedures, metrics, analysis, thesis structure, and completion criteria. Update it when research decisions, adopted implementations, experiment settings, or verified progress change; do not maintain a separate research plan. Track implementation status in GitHub issues.
 
 `docs/tech-stack.md` explains the implementation stack, dependency policy, engine scope, and rendering scope. Update this file when build tools, dependencies, graphics API assumptions, or runtime scope change.
 
@@ -141,10 +141,8 @@ Transform, MeshRenderer, MeshKind, and transform functions live in `Engine/Rende
 - Systems should contain behavior and operate on component data.
 - Avoid putting game logic directly into entity classes.
 - Prefer contiguous component storage for simulation-critical data.
-- Keep the first ECS implementation simple and measurable before optimizing it.
-- Do not introduce archetype complexity until the simpler storage strategy is implemented and benchmarked.
-
-Initial ECS implementation may use Sparse Set or type-based component arrays. Archetype ECS is an extension goal, not the first milestone.
+- Keep all three comparison implementations simple and measurable.
+- Support the defined Boid and Dummy component combinations and entity creation/deletion; avoid a general-purpose migration engine.
 
 ## Simulation Rules
 
@@ -160,17 +158,19 @@ Required simulation data should include:
 
 Prefer deterministic setup for benchmark scenarios. Random initialization should use explicit seeds when performance data will be collected.
 
+Dummy entities have Transform and Velocity without BoidParameters and are excluded from all Boids calculations. For the OOP comparison, derive BoidObject and DummyObject from a common SimulationObject holding Transform and Velocity, with a virtual destructor for deletion through base pointers. Only BoidObject adds Acceleration and BoidParameters. Store both in one std::vector<std::unique_ptr<SimulationObject>> with explicit ownership; include the pointer array and separately allocated objects in memory accounting. A runtime percentage n (0-100) controls deletion and recreation of floor(dummy_count * n / 100) Dummies each step; n=0 is the unchanged condition. Keep entity counts stable and use the same logical deletion plan across implementations.
+
 ## Excluded Rendering Work
 
-Common OOP/Sparse Set/Archetype visualization and frame/render timing instrumentation are outside the completion scope. Do not reintroduce issues #11 and #12 as prerequisites. Existing renderer code and vendored GLAD do not need to be removed for this scope change. Preserve CPU-only Transform data and simulation dependency boundaries.
+Common OOP/Sparse Set/Archetype visualization and frame/render timing instrumentation are outside the completion scope. Existing renderer code and vendored GLAD do not need to be removed for this scope change. Preserve CPU-only Transform data and simulation dependency boundaries.
 
 ## Benchmarking Rules
 
 Performance experiments should measure at least:
 
-- Overall and phase-specific simulation update time
+- Overall step time and the four intervals: entity changes, query preparation, neighbor calculation, state update
 - Updates per second
-- Initialization and first-use cache setup cost
+- Initialization time
 - Process and container memory usage
 
 Agent counts should be tested in fixed steps, for example:
@@ -184,7 +184,7 @@ Agent counts should be tested in fixed steps, for example:
 10000
 ```
 
-Benchmark comparisons use headless simulation only. Initialization, warmup, output, and optional external profiling must be distinguished from measured Update time.
+Benchmark comparisons use headless simulation only. Overall step time includes Dummy deletion/recreation, query preparation, neighbor calculation, and state update. Initialization, warmup, output, and optional external profiling are excluded from measured steps.
 
 Required comparison paths:
 
@@ -197,7 +197,7 @@ Required comparison paths:
 
 - Use C++20.
 - Prefer clear ownership and explicit lifetimes.
-- Avoid unnecessary inheritance.
+- Use the defined inheritance hierarchy for the OOP comparison; avoid unnecessary inheritance elsewhere.
 - Avoid global mutable state unless there is a clear engine-level reason.
 - Keep headers minimal.
 - Keep dependencies limited.
@@ -239,9 +239,3 @@ Before committing code changes, verify the default build path:
 cmake --preset vs2022
 cmake --build --preset vs2022-debug
 ```
-
-## Current Priority
-
-The next implementation priority is integrating the Archetype Boids experiment,
-then adding reproducible benchmark runs and result analysis for OOP, Sparse Set
-ECS, and Archetype ECS.
