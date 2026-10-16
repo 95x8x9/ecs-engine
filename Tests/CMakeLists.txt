@@ -87,6 +87,13 @@ target_link_libraries(EngineRenderingTests
 configure_test_target(EngineRenderingTests)
 gtest_discover_tests(EngineRenderingTests)
 
+add_executable(BoidsCommonTests
+    unit/simulation_input_tests.cpp
+)
+target_link_libraries(BoidsCommonTests PRIVATE Boids::Common GTest::gtest_main)
+configure_test_target(BoidsCommonTests)
+gtest_discover_tests(BoidsCommonTests)
+
 add_executable(BoidsEcsTests
     integration/boid_orientation_system_tests.cpp
     integration/boid_system_tests.cpp
