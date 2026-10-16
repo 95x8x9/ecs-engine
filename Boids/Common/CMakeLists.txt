@@ -7,3 +7,5 @@ target_include_directories(BoidsCommon
 )
 
 target_compile_features(BoidsCommon INTERFACE cxx_std_20)
+
+target_link_libraries(BoidsCommon INTERFACE glm::glm)

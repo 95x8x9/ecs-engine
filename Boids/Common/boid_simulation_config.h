@@ -21,6 +21,8 @@ struct BoidSimulationConfig {
                             .preferred_speed = 4.0F,
                             .max_speed = 6.0F,
                             .max_alignment_force = 1.5F};
+  std::size_t dummy_count{0U};
+  std::uint32_t dummy_change_percent{0U};
 };
 
 }  // namespace boids

@@ -41,6 +41,8 @@ Headless 실행은 창과 OpenGL 컨텍스트를 초기화하지 않고 CPU 시�
 
 CPU Transform 계산은 GLM에만 의존하는 `Engine::RenderData` 타깃으로 분리되어 있다.
 Boids는 이 타깃을 사용하며 OpenGL 렌더링 모듈에 의존하지 않는다.
+헤더 전용 `Boids::Common`도 입력 타입의 `glm::vec3`를 위해 `glm::glm`을 직접
+제공한다. Engine 의존성이나 추가 vcpkg 패키지는 없다.
 공통 계측은 `Engine::Measurement`에서 `std::chrono::steady_clock`과 이름별
 `start/stop` API로 수행한다. Windows 프로세스 최대 메모리는 PSAPI의
 `GetProcessMemoryInfo`로 수집한다. Windows 헤더는 구현 파일에만 포함하고

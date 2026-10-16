@@ -8,7 +8,7 @@
 | 모듈 | 책임 |
 | --- | --- |
 | `Engine/` | ECS 저장·조회, CPU Transform 계산, 공통 벤치마크와 기존 그래픽 런타임 |
-| `Boids/Common/` | 공통 초기 설정과 `BoidParameters` |
+| `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획의 입력 타입 |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
 | `Benchmarker/` | 초기화·warmup·고정 dt 측정 반복, 환경 수집과 결과 직렬화 |
@@ -16,7 +16,8 @@
 
 `App`은 Engine과 Boids를 조립한다. Boids 행동은 `Boids`에 두고,
 Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 수행하지 않는다.
-`Boids::Common`은 Engine에 의존하지 않으며, OOP는 `Engine::ECS`에 의존하지 않는다.
+`Boids::Common`은 GLM을 직접 제공하는 헤더 전용 타깃이며 Engine에 의존하지 않는다.
+OOP는 `Engine::ECS`에 의존하지 않는다.
 두 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
 
 `Benchmarker::Experiment`는 실험 실행 함수를 제공한다. App은 구현을 선택하고 이
@@ -25,6 +26,13 @@ Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 �
 Boids와 ECS 저장소는 이 API로 구간을 기록하고 소유한 저장량을 보고한다.
 
 ## 데이터와 저장 방식
+
+`Boids/Common/simulation_input.h`는 `ObjectKind`, `InitialObjectState`,
+`DummyStepPlan`, `SimulationInput`과 입력 생성함수의 선언을 제공한다.
+초기 상태는 종류·최초 생성 index인 논리 번호·위치·속도로 구성되며 Engine의
+Entity·Transform이나 객체 포인터를 포함하지 않는다. step별 변경 계획은 교체할
+Dummy의 논리 번호 목록이다. 호출자가 입력을 소유하고 시뮬레이션은 변경 없이 빌려
+사용하는 계약이다. 입력 생성함수의 구현과 실행 경로 연결은 이 선언에 포함되지 않는다.
 
 - Sparse Set ECS: Registry가 개체 수명과 타입별 ComponentStorage를 소유한다.
   컴포넌트는 dense 배열에 저장하고, sparse index로 개체와 배열 위치를 연결한다.
