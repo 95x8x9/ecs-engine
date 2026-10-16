@@ -8,7 +8,7 @@
 | 모듈 | 책임 |
 | --- | --- |
 | `Engine/` | ECS 저장·조회, CPU Transform 계산, 공통 벤치마크와 기존 그래픽 런타임 |
-| `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획의 입력 타입 |
+| `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획 생성 |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
 | `Benchmarker/` | 초기화·warmup·고정 dt 측정 반복, 환경 수집과 결과 직렬화 |
@@ -28,11 +28,37 @@ Boids와 ECS 저장소는 이 API로 구간을 기록하고 소유한 저장량�
 ## 데이터와 저장 방식
 
 `Boids/Common/simulation_input.h`는 `ObjectKind`, `InitialObjectState`,
-`DummyStepPlan`, `SimulationInput`과 입력 생성함수의 선언을 제공한다.
+`DummyStepPlan`, `SimulationInput`과 헤더 전용 입력 생성함수
+`PrepareSimulationInput(config, total_steps)`를 제공한다.
 초기 상태는 종류·최초 생성 index인 논리 번호·위치·속도로 구성되며 Engine의
 Entity·Transform이나 객체 포인터를 포함하지 않는다. step별 변경 계획은 교체할
 Dummy의 논리 번호 목록이다. 호출자가 입력을 소유하고 시뮬레이션은 변경 없이 빌려
-사용하는 계약이다. 입력 생성함수의 구현과 실행 경로 연결은 이 선언에 포함되지 않는다.
+사용하는 계약이다.
+
+생성 순서는 Boid부터 두 종류를 번갈아 배치한 뒤 남은 종류를 이어 붙인다.
+각 개체의 위치와 방향을 x·y·z 순으로 추출하고 방향을 정규화해 초기 속도를 만든다.
+초기 상태와 변경 계획은 같은 seed의 독립된 `std::mt19937`을 사용한다.
+계획은 매 step 전체 Dummy 논리 번호에서 `floor(dummy_count × dummy_change_percent / 100)`개를
+중복 없이 표본 추출하고 오름차순으로 저장한다. 같은 설정·seed·표준 라이브러리에서
+재현되며, 전체 step 수를 늘려도 앞부분의 상태와 계획은 바뀌지 않는다.
+표준 난수 분포와 표본 추출 알고리즘의 구현이 다를 수 있어 다른 표준 라이브러리 사이의
+동일한 난수 결과까지 보장하지는 않는다.
+
+Boid·Dummy 수와 step 수는 0을 허용한다. 변경 비율은 0~100이며, 변경 수가 0이면
+`total_steps`개의 빈 목록을 반환한다. 경계는 유한한 양수, 생성 범위는 경계 안의
+유한한 비음수이고 양 끝의 차이가 float으로 표현 가능해야 한다. 초기 속도와 행동
+파라미터는 유한한 비음수여야 한다. 잘못된 설정은 `std::invalid_argument`, 개체 수나
+계획 저장량의 산술 overflow 및 컨테이너 크기 한도 초과는 할당 전에
+`std::overflow_error`로 거부한다. 표현 가능한 크기라도 실제 메모리가 부족하면
+표준 컨테이너의 할당 실패 예외가 전달된다.
+
+호출자는 초기화 계측 전에 warmup과 측정 step 수의 합으로 입력을 한 번 생성한다.
+warmup 이후 상태나 계획을 다시 시작하지 않고 다음 step 목록부터 이어 쓴다.
+각 구현은 목록의 Dummy를 모두 삭제한 뒤 같은 순서로 재생성하며 최초 논리 번호와
+`initial_objects[logical_id]`의 위치·속도를 복원한다. Transform·회전·가속도와 행동
+파라미터의 저장은 각 구현의 책임이다. 입력 수명은 마지막 갱신과 저장량 보고까지
+유지하고 시뮬레이션 저장량과 별도로 보고해야 한다.
+현재 시뮬레이션·Benchmarker·CLI의 공통 입력 연결은 후속 작업이며 기존 실행 경로는 유지한다.
 
 - Sparse Set ECS: Registry가 개체 수명과 타입별 ComponentStorage를 소유한다.
   컴포넌트는 dense 배열에 저장하고, sparse index로 개체와 배열 위치를 연결한다.
