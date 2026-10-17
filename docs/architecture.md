@@ -8,6 +8,7 @@
 | 모듈 | 책임 |
 | --- | --- |
 | `Engine/` | ECS 저장·조회, CPU Transform 계산, 공통 벤치마크와 기존 그래픽 런타임 |
+| `Engine/ECS/Archetype/` | 컴포넌트 조합별 column 저장, Entity 수명·행 위치와 저장량 보고 |
 | `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획 생성 |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
@@ -63,6 +64,9 @@ warmup 이후 상태나 계획을 다시 시작하지 않고 다음 step 목록�
 - Sparse Set ECS: Registry가 개체 수명과 타입별 ComponentStorage를 소유한다.
   컴포넌트는 dense 배열에 저장하고, sparse index로 개체와 배열 위치를 연결한다.
   삭제 시 마지막 원소를 옮기고 index를 갱신한다.
+- Archetype ECS: 별도 Registry가 같은 컴포넌트 조합의 Table을 소유한다.
+  각 Table은 Entity 목록과 타입별 연속 column을 가지며, 같은 행은 같은 Entity를 뜻한다.
+  삭제 시 마지막 행의 모든 column과 Entity를 옮기고 해당 Entity의 위치를 갱신한다.
 - OOP: BoidSimulation이 `std::vector<BoidObject>`에 객체를 값으로 소유한다.
   각 객체가 Transform, 속도, 가속도와 BoidParameters를 보관한다.
 
@@ -121,8 +125,52 @@ unordered_map의 항목 payload는 계산하지만 구현별 node 링크·bucket
 fragmentation은 추정에 포함하지 않는다. 프로세스 최대값에는 계측 버퍼와 warmup도
 포함되며, 조회 시점까지의 프로세스 전체 수명에 대한 값이다.
 
+## Archetype 저장소 API
+
+`Engine::ArchetypeECS`는 `Engine/ECS/Archetype/registry.h`를 공개하며,
+namespace는 `engine::ecs::archetype`다. 기존 Sparse Set의 Registry와 독립적이고
+같은 `engine::ecs::Entity` 표현을 재사용한다. Entity는 자신을 만든 Registry에서만 사용한다.
+의존 타깃은 `Engine::Measurement`이며 Boids·GLM·OpenGL 의존성은 없다.
+
+```cpp
+engine::ecs::archetype::Registry registry;
+const auto entity = registry.Create(Position{1.0F}, Velocity{2.0F});
+auto& table = registry.GetOrCreateTable<Position, Velocity>();
+auto positions = table.Column<Position>();
+auto velocities = table.Column<Velocity>();
+for (std::size_t row = 0; row < table.Size(); ++row) {
+  positions[row].x += velocities[row].x;
+}
+registry.Destroy(entity); // 이후에는 table/column을 다시 조회한다.
+```
+
+예시의 Position·Velocity는 호출자가 정의하는 단순 컴포넌트 타입이다.
+저장 타입은 cv/ref가 없는 trivially copyable·copy constructible 타입이며,
+move 대입은 noexcept여야 한다. bool 값은 구조체로 감싸서 사용한다.
+컴포넌트가 별도 동적 자원을 소유하는 모델과 생성 후 컴포넌트 조합 변경은 지원하지 않는다.
+
+`GetOrCreateTable<T...>()`는 Entity 생성 없이 조합별 테이블을 준비하고,
+`FindTable<T...>() const`는 없으면 nullptr을 반환한다. 타입 나열 순서는 조합을
+바꾸지 않으며 중복 타입은 `std::invalid_argument`다. `Entities()[row]`와
+`Column<T>()[row]`는 같은 Entity에 대응한다. const Table은 const span을 반환하고,
+없는 column 요청은 `std::logic_error`다. 기존 테이블·column 조회는 동적 할당을 하지 않는다.
+생성·삭제·Clear 후에는 빌린 참조와 span을 다시 조회하며 순회 중 구조를 변경하지 않는다.
+
+Registry는 Entity ID별 테이블·행·generation과 free ID 배열을 유지한다.
+삭제·재사용과 Clear 후에도 이전 Entity가 다시 유효해지지 않도록 generation 이력을 보존한다.
+generation이 한도에 도달한 슬롯은 재사용하지 않으며 ID 한도 초과는
+`std::overflow_error`다. 생성 중 할당 실패 시 추가 중이던 행을 되돌린다.
+Registry와 Table은 복사·이동하지 않는다.
+
+`AppendStorageReport(report, prefix)`는 테이블 포인터 배열, 위치·generation 및
+free ID 배열, 별도 할당된 Table·column 객체와 그 원소 배열을 보고한다.
+모든 저장소를 소유한 vector와 명시적 객체 할당으로 구성하므로 숨겨진 map node나
+bucket 추정 항목은 없다. Registry 객체 자체는 호출자가 단독 객체 또는 상위 Simulation의
+sizeof로 한 번 계산하고, 이 메서드는 별도 할당만 더한다. prefix를 달리하면 여러 Registry를
+한 보고서에 넣을 수 있다. allocator overhead·fragmentation은 기존 기준대로 제외한다.
+
 현재 비교 실행은 Boid 전용 ECS/OOP이며 연구 요구사항의 Dummy, 상속 기반 OOP,
-Archetype은 아직 구현되지 않았다. 계측 API 계약과 연결 예시는
+Archetype 기반 Boids 시뮬레이션은 아직 구현되지 않았다. 계측 API 계약과 연결 예시는
 [벤치마크 API](benchmarker-api.md)를 참고한다.
 
 Headless 경로는 그래픽 초기화를 수행하지 않는다. 기존 시각화는 별도로

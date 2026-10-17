@@ -60,6 +60,14 @@ target_link_libraries(EngineEcsTests
 configure_test_target(EngineEcsTests)
 gtest_discover_tests(EngineEcsTests)
 
+add_executable(EngineArchetypeEcsTests
+    unit/archetype_registry_tests.cpp
+)
+target_link_libraries(EngineArchetypeEcsTests
+    PRIVATE Engine::ArchetypeECS GTest::gtest_main)
+configure_test_target(EngineArchetypeEcsTests)
+gtest_discover_tests(EngineArchetypeEcsTests)
+
 add_executable(EngineRenderDataTests
     unit/transform_tests.cpp
 )
