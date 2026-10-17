@@ -113,6 +113,14 @@ add_library(Engine::ECS ALIAS EngineECS)
 configure_engine_target(EngineECS)
 target_link_libraries(EngineECS PUBLIC Engine::Measurement)
 
+add_library(EngineArchetypeECS STATIC
+    ECS/Archetype/registry.cpp
+    ECS/Archetype/table.cpp
+)
+add_library(Engine::ArchetypeECS ALIAS EngineArchetypeECS)
+configure_engine_target(EngineArchetypeECS)
+target_link_libraries(EngineArchetypeECS PUBLIC Engine::Measurement)
+
 add_library(EngineECSRenderer STATIC
     ECSRenderer/ecs_render_system.cpp
 )
