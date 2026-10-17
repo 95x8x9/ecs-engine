@@ -11,6 +11,9 @@ class SimulationObject {
  public:
   virtual ~SimulationObject() = default;
 
+  SimulationObject(const SimulationObject&) = delete;
+  SimulationObject& operator=(const SimulationObject&) = delete;
+
   [[nodiscard]] boids::ObjectKind Kind() const { return kind_; }
   [[nodiscard]] std::size_t LogicalId() const { return logical_id_; }
   [[nodiscard]] const glm::vec3& Position() const {

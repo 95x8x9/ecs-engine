@@ -29,6 +29,11 @@ using engine::measurement::TimingRecorder;
 static_assert(std::has_virtual_destructor_v<SimulationObject>);
 static_assert(std::is_base_of_v<SimulationObject, BoidObject>);
 static_assert(std::is_base_of_v<SimulationObject, DummyObject>);
+static_assert(!std::is_copy_constructible_v<SimulationObject>);
+static_assert(!std::is_copy_assignable_v<SimulationObject>);
+static_assert(!std::is_move_assignable_v<SimulationObject>);
+static_assert(!std::is_copy_assignable_v<BoidObject>);
+static_assert(!std::is_copy_assignable_v<DummyObject>);
 static_assert(!std::is_copy_constructible_v<BoidSimulation>);
 
 // Direct fixtures deliberately do not depend on Common's input generator.

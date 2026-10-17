@@ -32,7 +32,8 @@ void ExpectRotationNear(const glm::quat& actual, const glm::quat& expected) {
   EXPECT_NEAR(glm::dot(actual, actual), 1.0F, kTolerance);
   EXPECT_NEAR(glm::dot(expected, expected), 1.0F, kTolerance);
   // q and -q represent the same rotation.
-  const glm::quat aligned = glm::dot(actual, expected) < 0.0F ? -actual : actual;
+  const glm::quat aligned =
+      glm::dot(actual, expected) < 0.0F ? -actual : actual;
   for (int component = 0; component < 4; ++component) {
     EXPECT_NEAR(aligned[component], expected[component], kTolerance);
   }
@@ -51,9 +52,8 @@ void CompareSimulations(const boids::BoidSimulationConfig& config,
       [&](engine::ecs::Entity entity, const Transform&, const Velocity&,
           const Acceleration&) { entities.push_back(entity); });
   // A fresh registry allocates IDs in creation order, matching OOP indices.
-  std::sort(entities.begin(), entities.end(), [](auto left, auto right) {
-    return left.Value() < right.Value();
-  });
+  std::sort(entities.begin(), entities.end(),
+            [](auto left, auto right) { return left.Value() < right.Value(); });
   boids::SimulationInput input;
   if (use_borrowed_input) {
     for (const auto entity : entities) {

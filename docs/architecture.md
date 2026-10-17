@@ -72,6 +72,7 @@ OOP는 공통 입력을 받는 초기화·갱신 API를 제공한다. ECS와 Ben
   BoidObject와 DummyObject를 함께 소유한다. 부모는 Transform, Velocity, 종류와
   논리 번호 및 가상 소멸자를 가지며, BoidObject만 Acceleration과 BoidParameters를
   추가한다. 객체 데이터는 개별 할당되고 포인터 배열만 연속 저장된다.
+  종류·논리 번호와 내부 번호 대응이 어긋나지 않도록 부모 객체의 복사·대입은 금지한다.
 
 ECS는 기존 시각화용 MeshRenderer 데이터도 보관한다.
 ECS의 View는 필요한 컴포넌트 조합을 조회하며, BoidSystem은 이웃 반복 조회에
