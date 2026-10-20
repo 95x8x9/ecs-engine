@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -65,6 +66,57 @@ const SimulationObject* Find(const BoidSimulation& simulation, std::size_t id) {
     if (object->LogicalId() == id) return object.get();
   }
   return nullptr;
+}
+
+std::vector<const SimulationObject*> ObjectsByLogicalId(
+    const BoidSimulation& simulation) {
+  std::vector<const SimulationObject*> objects;
+  objects.reserve(simulation.Objects().size());
+  for (const auto& object : simulation.Objects())
+    objects.push_back(object.get());
+  std::sort(objects.begin(), objects.end(),
+            [](const auto* left, const auto* right) {
+              return left->LogicalId() < right->LogicalId();
+            });
+  return objects;
+}
+
+void AssertSameState(const BoidSimulation& reference,
+                     const BoidSimulation& candidate) {
+  constexpr float kTolerance = 0.00001F;
+  const auto expected = ObjectsByLogicalId(reference);
+  const auto actual = ObjectsByLogicalId(candidate);
+  ASSERT_EQ(actual.size(), expected.size());
+  for (std::size_t index = 0; index < expected.size(); ++index) {
+    SCOPED_TRACE(::testing::Message() << "logical_id=" << index);
+    const auto& left = *expected[index];
+    const auto& right = *actual[index];
+    ASSERT_EQ(left.LogicalId(), index);
+    ASSERT_EQ(right.LogicalId(), index);
+    ASSERT_EQ(right.Kind(), left.Kind());
+    for (int axis = 0; axis < 3; ++axis) {
+      ASSERT_NEAR(right.Position()[axis], left.Position()[axis], kTolerance);
+      ASSERT_NEAR(right.Velocity()[axis], left.Velocity()[axis], kTolerance);
+      if (left.Kind() == ObjectKind::Boid) {
+        ASSERT_NEAR(static_cast<const BoidObject&>(right).Acceleration()[axis],
+                    static_cast<const BoidObject&>(left).Acceleration()[axis],
+                    kTolerance);
+      }
+    }
+    const auto& left_transform = left.GetTransform();
+    const auto& right_transform = right.GetTransform();
+    const auto aligned_rotation =
+        glm::dot(left_transform.rotation, right_transform.rotation) < 0.0F
+            ? -right_transform.rotation
+            : right_transform.rotation;
+    for (int component = 0; component < 4; ++component) {
+      ASSERT_NEAR(aligned_rotation[component],
+                  left_transform.rotation[component], kTolerance);
+    }
+    ASSERT_NEAR(glm::dot(right_transform.rotation, right_transform.rotation),
+                1.0F, kTolerance);
+    ASSERT_FLOAT_EQ(right_transform.scale, left_transform.scale);
+  }
 }
 
 void ExpectVecNear(const glm::vec3& actual, const glm::vec3& expected) {
@@ -450,7 +502,7 @@ TEST(OopSimulationTest, RejectsMismatchedCountsKindsIdsAndInvalidInitialState) {
   BoidSimulation simulation(config);
   simulation.Initialize(valid);
   const auto* original = Find(simulation, 0U);
-  for (int condition = 0; condition < 6; ++condition) {
+  for (int condition = 0; condition < 9; ++condition) {
     auto invalid = valid;
     switch (condition) {
       case 0:
@@ -471,6 +523,18 @@ TEST(OopSimulationTest, RejectsMismatchedCountsKindsIdsAndInvalidInitialState) {
       case 5:
         invalid.initial_objects[1].position.x =
             std::numeric_limits<float>::quiet_NaN();
+        break;
+      case 6:
+        invalid.initial_objects[1].velocity.y =
+            std::numeric_limits<float>::quiet_NaN();
+        break;
+      case 7:
+        invalid.initial_objects[0].position.z =
+            std::numeric_limits<float>::infinity();
+        break;
+      case 8:
+        invalid.initial_objects[0].velocity.z =
+            -std::numeric_limits<float>::infinity();
         break;
     }
     EXPECT_THROW(simulation.Initialize(invalid), std::invalid_argument);
@@ -632,6 +696,146 @@ TEST(OopCommonInputIntegrationTest,
   EXPECT_EQ(owned.size_bytes() - borrowed.size_bytes(),
             sizeof(SimulationInput) + 3U * sizeof(boids::InitialObjectState));
   EXPECT_NO_THROW(simulation.Update(0.0F));
+}
+
+TEST(OopCommonInputIntegrationTest,
+     MatchesEveryStepAcrossChurnRatesAtBenchmarkHorizon) {
+  constexpr std::size_t kWarmup = 100U;
+  constexpr std::size_t kMeasured = 1000U;
+  constexpr float kDeltaSeconds = 1.0F / 60.0F;
+  struct Scenario {
+    std::size_t boids;
+    std::size_t dummies;
+    std::uint32_t seed;
+  };
+  const std::array<Scenario, 3> scenarios{
+      {{100U, 100U, 42U}, {17U, 3U, 0U}, {3U, 17U, 12345U}}};
+  const std::array<std::uint32_t, 3> percentages{0U, 50U, 100U};
+  for (const auto& scenario : scenarios) {
+    SCOPED_TRACE(::testing::Message() << "boids=" << scenario.boids
+                                      << ", dummies=" << scenario.dummies
+                                      << ", seed=" << scenario.seed);
+    std::array<SimulationInput, 3> inputs;
+    std::array<std::unique_ptr<BoidSimulation>, 3> simulations;
+    std::array<TimingRecorder, 3> timings{
+        TimingRecorder({"entity_changes", "query_preparation",
+                        "neighbor_calculation", "state_update"}),
+        TimingRecorder({"entity_changes", "query_preparation",
+                        "neighbor_calculation", "state_update"}),
+        TimingRecorder({"entity_changes", "query_preparation",
+                        "neighbor_calculation", "state_update"})};
+    for (std::size_t index = 0; index < percentages.size(); ++index) {
+      boids::BoidSimulationConfig config;
+      config.boid_count = scenario.boids;
+      config.dummy_count = scenario.dummies;
+      config.random_seed = scenario.seed;
+      config.dummy_change_percent = percentages[index];
+      inputs[index] =
+          boids::PrepareSimulationInput(config, kWarmup + kMeasured);
+      simulations[index] = std::make_unique<BoidSimulation>(config);
+      simulations[index]->Initialize(inputs[index]);
+      timings[index].set_enabled(false);
+      ASSERT_NO_FATAL_FAILURE(
+          AssertSameState(*simulations[0], *simulations[index]));
+    }
+    for (std::size_t step = 0; step < kWarmup + kMeasured; ++step) {
+      SCOPED_TRACE(::testing::Message() << "step=" << step);
+      for (std::size_t index = 0; index < percentages.size(); ++index) {
+        auto& timing = timings[index];
+        if (step == kWarmup) timing.begin_measurement(kMeasured);
+        if (step >= kWarmup) timing.begin_step_measurement();
+        simulations[index]->Update(kDeltaSeconds,
+                                   inputs[index].dummy_steps[step], timing);
+        if (step >= kWarmup) timing.end_step_measurement();
+      }
+      for (std::size_t index = 1; index < percentages.size(); ++index) {
+        SCOPED_TRACE(::testing::Message() << "percent=" << percentages[index]);
+        ASSERT_NO_FATAL_FAILURE(
+            AssertSameState(*simulations[0], *simulations[index]));
+      }
+    }
+    for (std::size_t index = 0; index < percentages.size(); ++index) {
+      const auto result = timings[index].result();
+      EXPECT_EQ(result.measured_steps, kMeasured);
+      ASSERT_EQ(result.sections.size(), 4U);
+      for (const auto& section : result.sections) {
+        EXPECT_EQ(section.recorded_steps, kMeasured);
+      }
+      EXPECT_EQ(result.sections[0].calls, index == 0U ? 0U : kMeasured);
+      EXPECT_EQ(result.sections[1].calls, 0U);
+      EXPECT_EQ(result.sections[2].calls, kMeasured);
+      EXPECT_EQ(result.sections[3].calls, kMeasured);
+    }
+  }
+}
+
+TEST(OopCommonInputIntegrationTest,
+     SwitchesOwnedAndBorrowedInputsAfterChurnWithoutStaleState) {
+  boids::BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.dummy_count = 3U;
+  config.random_seed = 7U;
+  config.dummy_change_percent = 100U;
+  const auto original = boids::PrepareSimulationInput(config, 1U);
+  const auto owns_input = [](const BoidSimulation& simulation) {
+    const auto report = simulation.GetStorageReport();
+    return std::any_of(
+        report.entries().begin(), report.entries().end(),
+        [](const auto& entry) {
+          return std::string_view{entry.name}.starts_with("input.");
+        });
+  };
+  TimingRecorder disabled;
+  disabled.set_enabled(false);
+  BoidSimulation simulation(config);
+  simulation.Initialize();
+  for (int round = 0; round < 3; ++round) {
+    EXPECT_TRUE(owns_input(simulation));
+    simulation.Update(0.02F, original.dummy_steps.front(), disabled);
+    ExpectInitialDummies(simulation, original);
+    {
+      auto borrowed = original;
+      for (auto& initial : borrowed.initial_objects) {
+        if (initial.kind != ObjectKind::Dummy) continue;
+        initial.position += glm::vec3{static_cast<float>(round + 1)};
+        initial.velocity = glm::vec3{-2.0F, 1.0F, 0.5F};
+      }
+      simulation.Initialize(borrowed);
+      EXPECT_FALSE(owns_input(simulation));
+      simulation.Update(0.02F, borrowed.dummy_steps.front(), disabled);
+      ExpectInitialDummies(simulation, borrowed);
+      simulation.Initialize();
+      EXPECT_TRUE(owns_input(simulation));
+    }
+    simulation.Update(0.02F, original.dummy_steps.front(), disabled);
+    ExpectInitialDummies(simulation, original);
+  }
+}
+
+TEST(OopCommonInputIntegrationTest,
+     PreservesStorageAccountingAcrossChurnAndReinitialization) {
+  boids::BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.dummy_count = 3U;
+  config.dummy_change_percent = 67U;
+  const auto input = boids::PrepareSimulationInput(config, 40U);
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  const auto initial = simulation.GetStorageReport();
+  TimingRecorder disabled;
+  disabled.set_enabled(false);
+  for (const auto& plan : input.dummy_steps) {
+    simulation.Update(0.02F, plan, disabled);
+    ExpectInitialDummies(simulation, input);
+    const auto report = simulation.GetStorageReport();
+    EXPECT_TRUE(report.complete());
+    EXPECT_EQ(report.size_bytes(), initial.size_bytes());
+    EXPECT_EQ(report.capacity_bytes(), initial.capacity_bytes());
+  }
+  simulation.Initialize(input);
+  const auto reinitialized = simulation.GetStorageReport();
+  EXPECT_EQ(reinitialized.size_bytes(), initial.size_bytes());
+  EXPECT_EQ(reinitialized.capacity_bytes(), initial.capacity_bytes());
 }
 
 }  // namespace

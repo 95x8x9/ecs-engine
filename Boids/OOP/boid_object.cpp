@@ -38,14 +38,18 @@ glm::vec3 BoidObject::CalculateAlignment(const glm::vec3& velocity_sum,
 }
 
 void BoidObject::CalculateAcceleration(
-    std::span<const std::unique_ptr<SimulationObject>> objects) {
+    std::span<const std::unique_ptr<SimulationObject>> objects,
+    std::span<const std::size_t> object_indices) {
   glm::vec3 separation{0.0F};
   glm::vec3 velocity_sum{0.0F};
   glm::vec3 position_sum{0.0F};
   std::size_t neighbor_count = 0U;
 
   constexpr float kMinDistanceSquared = 0.00000001F;
-  for (const auto& other : objects) {
+  // The mapping is indexed by logical ID, so structural changes cannot reorder
+  // floating-point accumulation among Boids.
+  for (const auto object_index : object_indices) {
+    const auto& other = objects[object_index];
     if (other->Kind() != boids::ObjectKind::Boid || other.get() == this) {
       continue;
     }

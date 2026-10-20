@@ -184,7 +184,8 @@ void BoidSimulation::Update(float delta_seconds,
   timing.start("neighbor_calculation");
   for (auto& object : objects_) {
     if (object->Kind() == boids::ObjectKind::Boid) {
-      static_cast<BoidObject&>(*object).CalculateAcceleration(objects_);
+      auto& boid = static_cast<BoidObject&>(*object);
+      boid.CalculateAcceleration(objects_, object_indices_);
     }
   }
   timing.stop("neighbor_calculation");

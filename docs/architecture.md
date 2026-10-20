@@ -90,9 +90,11 @@ OOP의 `Initialize(const SimulationInput&)`는 Common의 입력을 복사하지 
 OOP의 계획을 받는 Update는 전달된 Dummy 번호 순서대로 모두 삭제한 후, 같은
 순서로 새 DummyObject를 생성한다. 삭제는 마지막 포인터를 빈자리로 옮기는
 swap-and-pop이며, 논리 번호→현재 index 배열을 갱신한다. 재생성은 빌린 입력의 최초
-위치·속도를 사용한다. 이웃 계산과 상태 갱신은 혼합 부모 포인터 배열을 순회하며
-종류를 검사해 Dummy를 제외한다. 별도 Boid 대상 캐시는 없다. 삭제로 물리적 순회
-순서가 바뀔 수 있으므로 상태 비교는 논리 번호와 부동소수점 허용 오차를 사용한다.
+위치·속도를 사용한다. 이웃 후보는 기존 번호 대응 배열을 논리 번호 순으로 순회해
+조회하며, 종류를 검사해 Dummy를 제외한다. 삭제로 물리적 배열 순서가 바뀌어도
+Boid의 부동소수점 합산 순서는 유지한다. 상태 갱신은 혼합 부모 포인터 배열에서
+Boid만 처리한다. 별도 Boid 대상 캐시나 정렬은 없으며, 번호 대응 조회 비용은
+`neighbor_calculation`에 포함한다. 상태 비교는 논리 번호와 명시한 허용 오차를 사용한다.
 
 ECS의 네 System은 모두 SystemManager가 `unique_ptr<System>`로 소유한다.
 System의 공통 Update는 Registry, dt와 같은 TimingRecorder 참조를 받는다.

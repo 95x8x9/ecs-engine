@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <span>
 
@@ -16,7 +17,8 @@ class BoidObject final : public SimulationObject {
                          initial.position, initial.velocity),
         parameters_(parameters) {}
   void CalculateAcceleration(
-      std::span<const std::unique_ptr<SimulationObject>> objects);
+      std::span<const std::unique_ptr<SimulationObject>> objects,
+      std::span<const std::size_t> object_indices);
   void Move(float delta_seconds);
   void ApplyBoundary(float boundary_half_extent);
   void UpdateOrientation();
