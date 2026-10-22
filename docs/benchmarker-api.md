@@ -141,13 +141,22 @@ const auto result = benchmarker::RunBenchmark<boids::ecs::BoidSimulation>(
     simulation_config, benchmark_config, "ecs");
 ```
 
-새 구현은 `Initialize()`, `Update(float, TimingRecorder&)`, `GetStorageReport() const`를
-제공하면 된다. 공통 부모나 콜백은 필요하지 않다. Update에서 네 구간 이름
+현재 `RunBenchmark` 템플릿은 `Initialize()`, `Update(float, TimingRecorder&)`,
+`GetStorageReport() const`를 호출한다. 공통 부모나 콜백은 필요하지 않다. Update에서 네 구간 이름
 `entity_changes`, `query_preparation`, `neighbor_calculation`, `state_update`를 사용한다.
 실제 작업이 없는 구간은 `record_zero`로 보고한다. 기존 무계측 Update 오버로드도 유지한다.
 
 현재 실행 함수는 Boid 전용 ECS/OOP를 지원하며 Dummy 변경·상속 기반 OOP·Archetype
 연구 구현은 포함하지 않는다. CSV에도 이 실행 범위를 명시한다.
+
+`Boids::Archetype`의 시뮬레이션은 `Initialize(input)`과
+`Update(dt, dummy_ids, timing)`을 제공한다. 공통 입력과 step 계획을 받으므로
+위 템플릿에 직접 전달하는 대신 호출자가 입력을 준비하고 실행 API를 직접 호출한다.
+입력은 초기화 계측 전에 warmup·측정 step 수의 합으로 한 번 생성하고, 마지막
+Update·저장량 보고까지 살아 있고 변경되지 않아야 한다. warmup에서는 계측을 끄고
+앞부분 계획을 적용하며, 측정에서는 상태를 유지한 채 `dummy_steps[warmup + step]`을
+전달한다. 호출자가 전체 step 계측과 측정 종료 후 프로세스 최대 메모리 조회를 수행한다.
+Archetype의 저장·실행 계약은 [아키텍처](architecture.md#archetype-boids-시뮬레이션)를 참고한다.
 
 ```powershell
 cmake --build --preset vs2022-release

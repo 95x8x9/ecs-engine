@@ -12,6 +12,7 @@
 | `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획 생성 |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
+| `Boids/Archetype/` | Boid·Dummy 테이블의 column 직접 순회와 공통 계획에 따른 Dummy 교체 |
 | `Benchmarker/` | 초기화·warmup·고정 dt 측정 반복, 환경 수집과 결과 직렬화 |
 | `App/` | 실행 옵션, 구현 선택, 콜백 연결과 결과 출력 |
 
@@ -19,7 +20,7 @@
 Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 수행하지 않는다.
 `Boids::Common`은 GLM을 직접 제공하는 헤더 전용 타깃이며 Engine에 의존하지 않는다.
 OOP는 `Engine::ECS`에 의존하지 않는다.
-두 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
+세 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
 
 `Benchmarker::Experiment`는 실험 실행 함수를 제공한다. App은 구현을 선택하고 이
 함수를 호출한다. 이 함수가 Boids를 직접 실행하며, Engine에는 콜백이나 시뮬레이션
@@ -59,7 +60,8 @@ warmup 이후 상태나 계획을 다시 시작하지 않고 다음 step 목록�
 `initial_objects[logical_id]`의 위치·속도를 복원한다. Transform·회전·가속도와 행동
 파라미터의 저장은 각 구현의 책임이다. 입력 수명은 마지막 갱신과 저장량 보고까지
 유지하고 시뮬레이션 저장량과 별도로 보고해야 한다.
-현재 시뮬레이션·Benchmarker·CLI의 공통 입력 연결은 후속 작업이며 기존 실행 경로는 유지한다.
+Archetype 시뮬레이션은 이 공통 입력 계약을 사용한다. 기존 ECS/OOP와
+Benchmarker·CLI의 공통 입력 연결은 후속 작업이며 기존 실행 경로는 유지한다.
 
 - Sparse Set ECS: Registry가 개체 수명과 타입별 ComponentStorage를 소유한다.
   컴포넌트는 dense 배열에 저장하고, sparse index로 개체와 배열 위치를 연결한다.
@@ -67,10 +69,12 @@ warmup 이후 상태나 계획을 다시 시작하지 않고 다음 step 목록�
 - Archetype ECS: 별도 Registry가 같은 컴포넌트 조합의 Table을 소유한다.
   각 Table은 Entity 목록과 타입별 연속 column을 가지며, 같은 행은 같은 Entity를 뜻한다.
   삭제 시 마지막 행의 모든 column과 Entity를 옮기고 해당 Entity의 위치를 갱신한다.
+  Boids 시뮬레이션은 Boid의 `Transform + Velocity + Acceleration + BoidParameters`와
+  Dummy의 `Transform + Velocity`를 별도 테이블에 저장한다.
 - OOP: BoidSimulation이 `std::vector<BoidObject>`에 객체를 값으로 소유한다.
   각 객체가 Transform, 속도, 가속도와 BoidParameters를 보관한다.
 
-두 구현은 기존 시각화용 MeshRenderer 데이터도 보관한다.
+기존 ECS/OOP는 시각화용 MeshRenderer 데이터도 보관한다.
 ECS의 View는 필요한 컴포넌트 조합을 조회하며, BoidSystem은 이웃 반복 조회에
 CachedView의 개체·dense index를 재사용한다. 값 변경은 그대로 반영되고,
 관련 저장 구조가 바뀌면 사용 전에 캐시를 갱신한다. 순회 중에는 구조를 변경하지 않는다.
@@ -108,7 +112,7 @@ OOP는 객체 메서드의 반복 호출로 수행한다. BoidSystem은 조회 �
 
 전체 step 계측은 Update 호출을 감싸며 초기화·warmup·출력은 제외한다.
 구간 시간과 별도로 측정하고 구간 계측 비용을 포함한다. 원자료 복사·집계는 step
-경계 밖에서 수행한다. 현재 Dummy 변경은 구현되지 않아 개체 변경 구간을 명시적
+경계 밖에서 수행한다. 기존 ECS/OOP는 Dummy 변경이 없어 개체 변경 구간을 명시적
 0으로 기록한다. OOP는 별도 조회 준비가 없어 해당 구간도 명시적 0으로 기록한다.
 
 저장량은 시뮬레이션 객체 자체와 소유한 배열·개별 할당 객체의 size/capacity 기반
@@ -169,8 +173,52 @@ bucket 추정 항목은 없다. Registry 객체 자체는 호출자가 단독 �
 sizeof로 한 번 계산하고, 이 메서드는 별도 할당만 더한다. prefix를 달리하면 여러 Registry를
 한 보고서에 넣을 수 있다. allocator overhead·fragmentation은 기존 기준대로 제외한다.
 
-현재 비교 실행은 Boid 전용 ECS/OOP이며 연구 요구사항의 Dummy, 상속 기반 OOP,
-Archetype 기반 Boids 시뮬레이션은 아직 구현되지 않았다. 계측 API 계약과 연결 예시는
+## Archetype Boids 시뮬레이션
+
+`Boids::Archetype`는 `Boids/Archetype/boid_simulation.h`의
+`boids::archetype::BoidSimulation`을 제공한다. 의존 타깃은 `Boids::Common`,
+`Engine::ArchetypeECS`, `Engine::RenderData`, `Engine::Measurement`다.
+Velocity·Acceleration은 기존 `Boids/ECS/Components/`의 단순 데이터 타입을
+재사용하며 Sparse Set Registry·SystemManager나 OpenGL에는 의존하지 않는다.
+
+생성자는 설정을 검사한다. `Initialize(const SimulationInput&)`는 개체 수·종류·
+논리 번호와 위치·속도의 유한성을 검사하고 기존 Registry와 번호 대응을 정리한다.
+입력 순서대로 Entity를 생성하며 두 테이블은 개체 수가 0이어도 초기화 시 준비한다.
+초기 회전은 속도 방향, scale은 0.7, 가속도는 0, 행동 파라미터는 config 값이다.
+입력은 복사하지 않고 빌리므로 호출자는 마지막 Update와 저장량 보고까지 수명과
+불변성을 보장한다. 시뮬레이션에 난수 생성기나 계획 카운터는 없다.
+
+`Update(dt, dummy_ids, timing)`는 초기화된 상태와 유한한 비음수 dt를 요구한다.
+호출자는 Common에서 만든 중복 없는 Dummy 목록을 warmup부터 측정 종료까지
+연속 전달한다. `entity_changes`에서 번호로 Entity를 찾고 목록 순서대로 모두
+삭제한 뒤 같은 순서로 재생성한다. 재생성은 입력의 최초 Transform·Velocity를
+복원하고 논리 번호→Entity 배열을 갱신한다. 배열 index와 Entity ID·테이블 행은
+독립적이다. `EntityFor(logical_id)`는 현재 Entity를 반환하고 없는 번호는
+`std::out_of_range`로 거부한다. `GetRegistry()`는 const 조회만 제공한다.
+할당 실패 등으로 변경이 중단되면 다시 Initialize한 뒤 실행해야 한다.
+
+구조 변경이 끝난 후 `query_preparation`에서 Boid 테이블과 네 column span을
+다시 조회한다. `neighbor_calculation`은 이 column의 행끼리 naive all-pairs로
+비교하며 Entity별 component 조회나 별도 대상 캐시는 없다. Boid 테이블의 행 순서는
+Dummy 교체에 영향받지 않아 이웃 합산 순서도 유지된다. 모든 가속도를 먼저 계산한
+다음 `state_update`에서 가속도 반영·속도 제한·위치 적분, 경계 처리, 최종 속도의
+방향 갱신을 순서대로 수행한다. Dummy는 모든 Boids 계산과 상태 갱신에서 제외된다.
+빈 변경 목록의 `entity_changes`와 Boid가 없는 경우의 이웃 계산·상태 갱신은
+`record_zero`로 기록한다. 테이블·column 조회가 있으므로 조회 준비는 계측한다.
+
+`GetStorageReport()`는 Simulation 객체, 논리 번호 대응 배열과 Registry의 모든
+별도 할당을 각각 한 번 보고한다. Registry 객체와 vector 제어 필드는 Simulation의
+sizeof에 포함되므로 다시 더하지 않는다. 빌린 입력·계획, 전체 step 계측과 프로세스
+최대 메모리 조회는 호출자 책임이다. `BoidsArchetypeTests`는 이 타깃과 GoogleTest만
+링크하여 창·그래픽 초기화 없이 초기화·warmup·측정·저장량 보고를 직접 검증한다.
+Dummy 변경 비율 0·40·100%에서 warmup 이후 계측을 활성화한 실행과 전체를
+무계측으로 연속 실행한 결과를 매 step 비교한다. 논리 번호별 위치·속도·가속도와
+부호를 맞춘 회전 성분의 절대 허용 오차는 `1e-5`이며, Entity generation과 최종
+저장량도 비교하여 측정 전환 시 상태·계획을 다시 시작하지 않음을 검증한다.
+
+현재 App/Benchmarker 비교 실행은 Boid 전용 ECS/OOP이며 Dummy 변경과 Archetype
+선택을 연결하지 않았다. 상속 기반 OOP와 세 구현 전체 동등성 검증도 후속 작업이다.
+계측 API 계약과 연결 예시는
 [벤치마크 API](benchmarker-api.md)를 참고한다.
 
 Headless 경로는 그래픽 초기화를 수행하지 않는다. 기존 시각화는 별도로

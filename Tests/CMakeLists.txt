@@ -68,6 +68,11 @@ target_link_libraries(EngineArchetypeEcsTests
 configure_test_target(EngineArchetypeEcsTests)
 gtest_discover_tests(EngineArchetypeEcsTests)
 
+add_executable(BoidsArchetypeTests integration/archetype_boid_simulation_tests.cpp)
+target_link_libraries(BoidsArchetypeTests PRIVATE Boids::Archetype GTest::gtest_main)
+configure_test_target(BoidsArchetypeTests)
+gtest_discover_tests(BoidsArchetypeTests)
+
 add_executable(EngineRenderDataTests
     unit/transform_tests.cpp
 )
