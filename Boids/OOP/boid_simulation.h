@@ -26,6 +26,8 @@ class BoidSimulation {
   void Update(float delta_seconds, engine::measurement::TimingRecorder& timing);
   // dummy_ids is a valid, unique Dummy list prepared by Common; no plan cursor
   // or random selection is maintained by the simulation.
+  // An exception after work starts requires reinitialization and discarding
+  // that timing run. Non-finite arithmetic throws std::overflow_error.
   void Update(float delta_seconds, std::span<const std::size_t> dummy_ids,
               engine::measurement::TimingRecorder& timing);
   [[nodiscard]] engine::measurement::StorageReport GetStorageReport() const;

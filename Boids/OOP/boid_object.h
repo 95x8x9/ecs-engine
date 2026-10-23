@@ -26,8 +26,6 @@ class BoidObject final : public SimulationObject {
   [[nodiscard]] const glm::vec3& Acceleration() const { return acceleration_; }
 
  private:
-  glm::vec3 CalculateAlignment(const glm::vec3& velocity_sum,
-                               std::size_t neighbor_count) const;
   glm::vec3 acceleration_{0.0F};
   boids::BoidParameters parameters_;
 };

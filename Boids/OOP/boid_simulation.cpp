@@ -2,12 +2,12 @@
 
 #include <cassert>
 #include <cmath>
-#include <initializer_list>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
+#include "Boids/Common/simulation_validation.h"
 #include "Boids/OOP/boid_object.h"
 #include "Boids/OOP/dummy_object.h"
 
@@ -30,34 +30,8 @@ std::size_t DummyChangeCount(const boids::BoidSimulationConfig& config) {
 }  // namespace
 
 BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
-    : config_(std::move(config)) {
-  if (!std::isfinite(config_.boundary_half_extent) ||
-      config_.boundary_half_extent <= 0.0F) {
-    throw std::invalid_argument(
-        "Boundary half extent must be finite and positive");
-  }
-  if (!std::isfinite(config_.spawn_half_extent) ||
-      config_.spawn_half_extent < 0.0F ||
-      config_.spawn_half_extent > config_.boundary_half_extent ||
-      config_.spawn_half_extent > std::numeric_limits<float>::max() / 2.0F) {
-    throw std::invalid_argument(
-        "Spawn range must be finite, representable and inside the boundary");
-  }
-  const auto& parameters = config_.parameters;
-  for (const float value :
-       {config_.initial_speed, parameters.neighbor_radius,
-        parameters.separation_radius, parameters.separation_weight,
-        parameters.alignment_weight, parameters.cohesion_weight,
-        parameters.preferred_speed, parameters.max_speed,
-        parameters.max_alignment_force}) {
-    if (!std::isfinite(value) || value < 0.0F) {
-      throw std::invalid_argument(
-          "Initial speed and Boid parameters must be finite and nonnegative");
-    }
-  }
-  if (config_.dummy_change_percent > 100U) {
-    throw std::invalid_argument("Dummy change percent must be in [0, 100]");
-  }
+    : config_(config) {
+  boids::ValidateSimulationConfig(config_);
   if (config_.boid_count > kMissingIndex - config_.dummy_count) {
     throw std::overflow_error("Object count overflow");
   }
@@ -126,9 +100,6 @@ void BoidSimulation::Initialize(const boids::SimulationInput& input) {
 }
 
 void BoidSimulation::ChangeDummies(std::span<const std::size_t> dummy_ids) {
-  // A failed allocation during recreation requires reinitialization before the
-  // next update. Never continue with an incomplete logical-ID mapping.
-  initialized_ = false;
   for (const auto id : dummy_ids) {
     assert(id < object_indices_.size());
     const auto index = object_indices_[id];
@@ -146,7 +117,6 @@ void BoidSimulation::ChangeDummies(std::span<const std::size_t> dummy_ids) {
         std::make_unique<DummyObject>(input_->initial_objects[id]));
     object_indices_[id] = objects_.size() - 1U;
   }
-  initialized_ = true;
 }
 
 void BoidSimulation::Update(float delta_seconds) {
@@ -169,9 +139,9 @@ void BoidSimulation::Update(float delta_seconds,
   if (!initialized_) {
     throw std::logic_error("Simulation must be initialized before Update");
   }
-  if (!std::isfinite(delta_seconds) || delta_seconds < 0.0F) {
-    throw std::invalid_argument("Delta time must be finite and nonnegative");
-  }
+  boids::ValidateDeltaTime(delta_seconds);
+  // Work may leave partial structural or numeric changes if it throws.
+  initialized_ = false;
 
   if (dummy_ids.empty()) {
     timing.record_zero("entity_changes");
@@ -208,6 +178,7 @@ void BoidSimulation::Update(float delta_seconds,
     }
   }
   timing.stop("state_update");
+  initialized_ = true;
 }
 
 engine::measurement::StorageReport BoidSimulation::GetStorageReport() const {

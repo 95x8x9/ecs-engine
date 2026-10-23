@@ -1,11 +1,9 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
-#include <initializer_list>
 #include <iterator>
 #include <limits>
 #include <random>
@@ -13,6 +11,7 @@
 #include <vector>
 
 #include "Boids/Common/boid_simulation_config.h"
+#include "Boids/Common/simulation_validation.h"
 
 namespace boids {
 
@@ -41,33 +40,7 @@ struct SimulationInput {
 // the plan. Reproducibility assumes the same standard library implementation.
 [[nodiscard]] inline SimulationInput PrepareSimulationInput(
     const BoidSimulationConfig& config, std::size_t total_steps) {
-  if (config.dummy_change_percent > 100U) {
-    throw std::invalid_argument("Dummy change percent must be in [0, 100]");
-  }
-  if (!std::isfinite(config.boundary_half_extent) ||
-      config.boundary_half_extent <= 0.0F) {
-    throw std::invalid_argument(
-        "Boundary half extent must be finite and positive");
-  }
-  if (!std::isfinite(config.spawn_half_extent) ||
-      config.spawn_half_extent < 0.0F ||
-      config.spawn_half_extent > config.boundary_half_extent ||
-      config.spawn_half_extent > std::numeric_limits<float>::max() / 2.0F) {
-    throw std::invalid_argument(
-        "Spawn range must be finite, representable and inside the boundary");
-  }
-  const auto& parameters = config.parameters;
-  for (const float value :
-       {config.initial_speed, parameters.neighbor_radius,
-        parameters.separation_radius, parameters.separation_weight,
-        parameters.alignment_weight, parameters.cohesion_weight,
-        parameters.preferred_speed, parameters.max_speed,
-        parameters.max_alignment_force}) {
-    if (!std::isfinite(value) || value < 0.0F) {
-      throw std::invalid_argument(
-          "Initial speed and Boid parameters must be finite and nonnegative");
-    }
-  }
+  ValidateSimulationConfig(config);
 
   const auto checked_add = [](std::size_t left, std::size_t right) {
     if (right > std::numeric_limits<std::size_t>::max() - left) {

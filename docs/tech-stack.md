@@ -48,6 +48,10 @@ Engine 의존성이나 추가 vcpkg 패키지는 없다. `BoidsCommonTests`는
 `Engine::ArchetypeECS`는 표준 C++20의 vector·span과 RTTI로 타입별 column을
 관리하며 `Engine::Measurement`에만 의존한다. 별도 패키지나 그래픽 의존성은 없고,
 `EngineArchetypeEcsTests`는 이 타깃과 GoogleTest만 링크한다.
+`Boids::Archetype`는 이 저장소와 `Boids::Common`, `Engine::RenderData`,
+`Engine::Measurement`를 사용한다. 기존 Velocity·Acceleration 헤더를 재사용하지만
+Sparse Set ECS 실행 코드나 그래픽 라이브러리는 링크하지 않는다.
+`BoidsArchetypeTests`도 이 타깃과 GoogleTest만 링크해 headless 실행을 검증한다.
 공통 계측은 `Engine::Measurement`에서 `std::chrono::steady_clock`과 이름별
 `start/stop` API로 수행한다. Windows 프로세스 최대 메모리는 PSAPI의
 `GetProcessMemoryInfo`로 수집한다. Windows 헤더는 구현 파일에만 포함하고
