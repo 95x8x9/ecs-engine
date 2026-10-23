@@ -15,6 +15,7 @@
 #include "Boids/ECS/Systems/boid_system.h"
 #include "Boids/ECS/Systems/movement_system.h"
 #include "Boids/ECS/boid_simulation.h"
+#include "Boids/OOP/boid_object.h"
 #include "Boids/OOP/boid_simulation.h"
 #include "Engine/Renderer/transform.h"
 
@@ -44,11 +45,11 @@ void ExpectRotationNear(const glm::quat& actual, const glm::quat& expected) {
 }
 
 void CompareSimulations(const boids::BoidSimulationConfig& config,
-                        float delta_seconds = 1.0F / 60.0F) {
+                        float delta_seconds = 1.0F / 60.0F,
+                        bool use_borrowed_input = false) {
   boids::ecs::BoidSimulation ecs_simulation(config);
   boids::oop::BoidSimulation oop_simulation(config);
   ecs_simulation.Initialize();
-  oop_simulation.Initialize();
 
   auto& registry = ecs_simulation.GetRegistry();
   std::vector<engine::ecs::Entity> entities;
@@ -58,8 +59,21 @@ void CompareSimulations(const boids::BoidSimulationConfig& config,
   // A fresh registry allocates IDs in creation order, matching OOP indices.
   std::sort(entities.begin(), entities.end(),
             [](auto left, auto right) { return left.Value() < right.Value(); });
+  boids::SimulationInput input;
+  if (use_borrowed_input) {
+    for (const auto entity : entities) {
+      input.initial_objects.push_back(
+          {.kind = boids::ObjectKind::Boid,
+           .logical_id = input.initial_objects.size(),
+           .position = registry.FindComponent<Transform>(entity)->position,
+           .velocity = registry.FindComponent<Velocity>(entity)->value});
+    }
+    oop_simulation.Initialize(input);
+  } else {
+    oop_simulation.Initialize();
+  }
   ASSERT_EQ(entities.size(), config.boid_count);
-  ASSERT_EQ(oop_simulation.Boids().size(), config.boid_count);
+  ASSERT_EQ(oop_simulation.Objects().size(), config.boid_count);
 
   for (int step = 0; step <= 100; ++step) {
     SCOPED_TRACE(::testing::Message() << "step=" << step);
@@ -70,7 +84,10 @@ void CompareSimulations(const boids::BoidSimulationConfig& config,
     for (std::size_t index = 0; index < entities.size(); ++index) {
       SCOPED_TRACE(::testing::Message() << "boid=" << index);
       const auto entity = entities[index];
-      const auto& object = oop_simulation.Boids()[index];
+      const auto& base = *oop_simulation.Objects()[index];
+      ASSERT_EQ(base.Kind(), boids::ObjectKind::Boid);
+      EXPECT_EQ(base.LogicalId(), index);
+      const auto& object = static_cast<const boids::oop::BoidObject&>(base);
       const auto* transform = registry.FindComponent<Transform>(entity);
       ASSERT_NE(transform, nullptr);
       {
@@ -103,6 +120,21 @@ TEST(BoidEquivalenceTest, MatchesInitialStateAndEveryStepForMultipleSeeds) {
     config.boid_count = 24U;
     config.random_seed = seed;
     CompareSimulations(config);
+  }
+}
+
+TEST(BoidEquivalenceTest, MatchesBorrowedInputForMultipleSeedsAndBoundaries) {
+  for (std::uint32_t seed : {0U, 42U, 12345U}) {
+    SCOPED_TRACE(::testing::Message() << "seed=" << seed);
+    boids::BoidSimulationConfig config;
+    config.boid_count = 24U;
+    config.random_seed = seed;
+    CompareSimulations(config, 1.0F / 60.0F, true);
+    config.spawn_half_extent = 1.0F;
+    config.boundary_half_extent = 1.0F;
+    config.initial_speed = 10.0F;
+    config.parameters.max_speed = 3.0F;
+    CompareSimulations(config, 0.05F, true);
   }
 }
 
@@ -150,8 +182,66 @@ TEST(BoidEquivalenceTest, MatchesWithLargeFiniteInitialSpeed) {
   CompareSimulations(config);
 }
 
-// The legacy OOP/ECS simulations do not yet accept common input. Exercise
-// their object/system APIs with the same explicit Boid states instead.
+TEST(BoidEquivalenceTest, OopAndArchetypeMatchDuringDummyChurn) {
+  constexpr std::size_t kWarmup = 100U;
+  constexpr std::size_t kMeasured = 1000U;
+  constexpr float kDt = 1.0F / 60.0F;
+  for (const std::uint32_t seed : {0U, 42U, 12345U}) {
+    for (const std::uint32_t percent : {0U, 40U, 100U}) {
+      SCOPED_TRACE(::testing::Message() << seed << ", " << percent);
+      boids::BoidSimulationConfig config;
+      config.boid_count = 17U;
+      config.dummy_count = 23U;
+      config.random_seed = seed;
+      config.dummy_change_percent = percent;
+      config.spawn_half_extent = 2.0F;
+      config.boundary_half_extent = 3.0F;
+      const auto input =
+          boids::PrepareSimulationInput(config, kWarmup + kMeasured);
+      boids::oop::BoidSimulation oop(config);
+      boids::archetype::BoidSimulation archetype(config);
+      oop.Initialize(input);
+      archetype.Initialize(input);
+      engine::measurement::TimingRecorder disabled;
+      disabled.set_enabled(false);
+      for (std::size_t step = 0; step < input.dummy_steps.size(); ++step) {
+        SCOPED_TRACE(step);
+        oop.Update(kDt, input.dummy_steps[step], disabled);
+        archetype.Update(kDt, input.dummy_steps[step], disabled);
+        const auto& table = *archetype.GetRegistry()
+                                 .FindTable<Transform, Velocity, Acceleration,
+                                            boids::BoidParameters>();
+        const auto entities = table.Entities();
+        ASSERT_EQ(oop.Objects().size(), input.initial_objects.size());
+        ASSERT_EQ(archetype.GetRegistry().EntityCount(),
+                  input.initial_objects.size());
+        for (const auto& base : oop.Objects()) {
+          if (base->Kind() != boids::ObjectKind::Boid) continue;
+          SCOPED_TRACE(base->LogicalId());
+          const auto found = std::find(entities.begin(), entities.end(),
+                                       archetype.EntityFor(base->LogicalId()));
+          ASSERT_NE(found, entities.end());
+          const auto row = static_cast<std::size_t>(found - entities.begin());
+          const auto& object =
+              static_cast<const boids::oop::BoidObject&>(*base);
+          const auto& transform = table.Column<Transform>()[row];
+          ExpectVec3Near(object.Position(), transform.position);
+          ExpectVec3Near(object.Velocity(),
+                         table.Column<Velocity>()[row].value);
+          ExpectVec3Near(object.Acceleration(),
+                         table.Column<Acceleration>()[row].value);
+          ExpectRotationNear(object.GetTransform().rotation,
+                             transform.rotation);
+          EXPECT_FLOAT_EQ(object.GetTransform().scale, transform.scale);
+        }
+        ASSERT_FALSE(::testing::Test::HasFailure());
+      }
+    }
+  }
+}
+
+// OOP and Archetype accept the same input; exercise the legacy ECS system
+// APIs with those explicit states until its common-input integration lands.
 void ExpectArithmeticOverflow(const boids::BoidSimulationConfig& config,
                               const boids::SimulationInput& input, float dt) {
   boids::archetype::BoidSimulation archetype(config);
@@ -168,11 +258,28 @@ void ExpectArithmeticOverflow(const boids::BoidSimulationConfig& config,
   disabled.set_enabled(false);
   EXPECT_THROW(archetype.Update(dt, {}, disabled), std::logic_error);
 
-  std::vector<boids::oop::BoidObject> objects;
+  boids::oop::BoidSimulation oop(config);
+  oop.Initialize(input);
+  engine::measurement::TimingRecorder oop_timing(
+      {"entity_changes", "query_preparation", "neighbor_calculation",
+       "state_update"});
+  oop_timing.begin_measurement(1U);
+  oop_timing.begin_step_measurement();
+  EXPECT_THROW(oop.Update(dt, {}, oop_timing), std::overflow_error);
+  EXPECT_THROW(oop_timing.end_step_measurement(), std::logic_error);
+  EXPECT_THROW(static_cast<void>(oop_timing.result()), std::logic_error);
+  EXPECT_THROW(oop.Update(dt, {}, disabled), std::logic_error);
+  auto reset_input = input;
+  for (auto& initial : reset_input.initial_objects) {
+    initial.position = glm::vec3{0.0F};
+    initial.velocity = glm::vec3{0.0F};
+  }
+  oop.Initialize(reset_input);
+  EXPECT_NO_THROW(oop.Update(0.0F, {}, disabled));
+
   engine::ecs::Registry registry;
   for (const auto& initial : input.initial_objects) {
     ASSERT_EQ(initial.kind, boids::ObjectKind::Boid);
-    objects.emplace_back(initial.position, initial.velocity, config.parameters);
     const auto entity = registry.Create();
     registry.Emplace<Transform>(entity,
                                 Transform{.position = initial.position});
@@ -180,12 +287,6 @@ void ExpectArithmeticOverflow(const boids::BoidSimulationConfig& config,
     registry.Emplace<Acceleration>(entity, Acceleration{});
     registry.Emplace<boids::BoidParameters>(entity, config.parameters);
   }
-  EXPECT_THROW(
-      {
-        for (auto& object : objects) object.CalculateAcceleration(objects);
-        for (auto& object : objects) object.Move(dt);
-      },
-      std::overflow_error);
   boids::ecs::BoidSystem boid_system;
   boids::ecs::MovementSystem movement;
   EXPECT_THROW(
@@ -258,10 +359,10 @@ TEST(BoidEquivalenceTest, LegacySimulationsRejectInvalidConfigAndDt) {
     boids::oop::BoidSimulation oop(config);
     ecs.Initialize();
     oop.Initialize();
-    const auto before = oop.Boids()[0].Position();
+    const auto before = oop.Objects()[0]->Position();
     EXPECT_THROW(ecs.Update(invalid), std::invalid_argument);
     EXPECT_THROW(oop.Update(invalid), std::invalid_argument);
-    ExpectVec3Near(oop.Boids()[0].Position(), before);
+    ExpectVec3Near(oop.Objects()[0]->Position(), before);
     EXPECT_NO_THROW(ecs.Update(0.01F));
     EXPECT_NO_THROW(oop.Update(0.01F));
   }
