@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
-
-#include <cmath>
+#include <limits>
 
 #include "Engine/Renderer/transform.h"
 
@@ -68,6 +68,15 @@ TEST(TransformTest, ZeroDirectionProducesIdentityRotation) {
   EXPECT_NEAR(rotation.x, 0.0F, kTolerance);
   EXPECT_NEAR(rotation.y, 0.0F, kTolerance);
   EXPECT_NEAR(rotation.z, 0.0F, kTolerance);
+}
+
+TEST(TransformTest, LargeFiniteDirectionProducesFiniteAlignedRotation) {
+  for (const float magnitude : {1e20F, std::numeric_limits<float>::max()}) {
+    const glm::vec3 direction{magnitude * 0.75F, magnitude, 0.0F};
+    const auto rotation = engine::renderer::RotationFromDirection(direction);
+    EXPECT_NEAR(glm::length(rotation), 1.0F, kTolerance);
+    ExpectVec3Near(rotation * glm::vec3{0.0F, 0.0F, 1.0F}, {0.6F, 0.8F, 0.0F});
+  }
 }
 
 }  // namespace

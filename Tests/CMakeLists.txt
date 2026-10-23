@@ -68,7 +68,10 @@ target_link_libraries(EngineArchetypeEcsTests
 configure_test_target(EngineArchetypeEcsTests)
 gtest_discover_tests(EngineArchetypeEcsTests)
 
-add_executable(BoidsArchetypeTests integration/archetype_boid_simulation_tests.cpp)
+add_executable(BoidsArchetypeTests
+    integration/archetype_boid_simulation_tests.cpp
+    integration/archetype_reference_tests.cpp
+)
 target_link_libraries(BoidsArchetypeTests PRIVATE Boids::Archetype GTest::gtest_main)
 configure_test_target(BoidsArchetypeTests)
 gtest_discover_tests(BoidsArchetypeTests)
@@ -102,6 +105,7 @@ gtest_discover_tests(EngineRenderingTests)
 
 add_executable(BoidsCommonTests
     unit/simulation_input_tests.cpp
+    unit/vector_math_tests.cpp
 )
 target_link_libraries(BoidsCommonTests PRIVATE Boids::Common GTest::gtest_main)
 configure_test_target(BoidsCommonTests)
@@ -127,7 +131,7 @@ add_executable(BoidsComparisonTests
     integration/boid_equivalence_tests.cpp
 )
 target_link_libraries(BoidsComparisonTests
-    PRIVATE Boids::ECS Boids::OOP GTest::gtest_main
+    PRIVATE Boids::ECS Boids::OOP Boids::Archetype GTest::gtest_main
 )
 configure_test_target(BoidsComparisonTests)
 gtest_discover_tests(BoidsComparisonTests)

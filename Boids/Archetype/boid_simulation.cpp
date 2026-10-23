@@ -2,10 +2,12 @@
 
 #include <cmath>
 #include <glm/geometric.hpp>
-#include <initializer_list>
 #include <limits>
 #include <stdexcept>
 
+#include "Boids/Common/alignment.h"
+#include "Boids/Common/simulation_validation.h"
+#include "Boids/Common/vector_math.h"
 #include "Boids/ECS/Components/acceleration.h"
 #include "Boids/ECS/Components/velocity.h"
 #include "Engine/Measurement/timing_recorder.h"
@@ -31,25 +33,6 @@ Transform InitialTransform(const boids::InitialObjectState& initial) {
           .scale = 0.7F};
 }
 
-glm::vec3 CalculateAlignment(const glm::vec3& velocity_sum,
-                             std::size_t neighbor_count,
-                             const Velocity& velocity,
-                             const boids::BoidParameters& parameters) {
-  const glm::vec3 average = velocity_sum / static_cast<float>(neighbor_count);
-  if (glm::dot(average, average) <= kMinVectorLengthSquared ||
-      parameters.max_alignment_force <= 0.0F) {
-    return glm::vec3{0.0F};
-  }
-  const glm::vec3 desired =
-      glm::normalize(average) * parameters.preferred_speed;
-  const glm::vec3 steering = desired - velocity.value;
-  if (glm::dot(steering, steering) <=
-      parameters.max_alignment_force * parameters.max_alignment_force) {
-    return steering;
-  }
-  return glm::normalize(steering) * parameters.max_alignment_force;
-}
-
 void CalculateAccelerations(std::span<const Transform> transforms,
                             std::span<const Velocity> velocities,
                             std::span<const boids::BoidParameters> parameters,
@@ -65,31 +48,34 @@ void CalculateAccelerations(std::span<const Transform> transforms,
       const glm::vec3 offset =
           transforms[other].position - transforms[self].position;
       const float distance_squared = glm::dot(offset, offset);
-      if (distance_squared >=
-          settings.neighbor_radius * settings.neighbor_radius) {
+      if (!boids::WithinRadius(distance_squared, transforms[self].position,
+                               transforms[other].position,
+                               settings.neighbor_radius)) {
         continue;
       }
       ++neighbor_count;
       velocity_sum += velocities[other].value;
       position_sum += transforms[other].position;
       if (distance_squared > kMinVectorLengthSquared &&
-          distance_squared <
-              settings.separation_radius * settings.separation_radius) {
-        separation -= offset / distance_squared;
+          boids::WithinRadius(distance_squared, transforms[self].position,
+                              transforms[other].position,
+                              settings.separation_radius)) {
+        separation -= boids::InverseSquareOffset(offset, distance_squared);
       }
     }
     if (neighbor_count == 0U) {
       accelerations[self].value = glm::vec3{0.0F};
       continue;
     }
-    const auto alignment = CalculateAlignment(velocity_sum, neighbor_count,
-                                              velocities[self], settings);
+    const auto alignment = boids::CalculateAlignment(
+        velocity_sum, neighbor_count, velocities[self].value, settings);
     const glm::vec3 cohesion =
         position_sum / static_cast<float>(neighbor_count) -
         transforms[self].position;
-    accelerations[self].value = separation * settings.separation_weight +
-                                alignment * settings.alignment_weight +
-                                cohesion * settings.cohesion_weight;
+    accelerations[self].value =
+        boids::RequireFinite(separation * settings.separation_weight +
+                             alignment * settings.alignment_weight +
+                             cohesion * settings.cohesion_weight);
   }
 }
 
@@ -101,13 +87,9 @@ void UpdateStates(std::span<Transform> transforms,
   for (std::size_t row = 0; row < transforms.size(); ++row) {
     auto& velocity = velocities[row].value;
     velocity += accelerations[row].value * dt;
-    const float speed = glm::length(velocity);
-    if (parameters[row].max_speed <= 0.0F) {
-      velocity = glm::vec3{0.0F};
-    } else if (speed > parameters[row].max_speed) {
-      velocity = glm::normalize(velocity) * parameters[row].max_speed;
-    }
-    transforms[row].position += velocity * dt;
+    velocity = boids::LimitSpeed(velocity, parameters[row].max_speed);
+    transforms[row].position =
+        boids::RequireFinite(transforms[row].position + velocity * dt);
   }
   for (std::size_t row = 0; row < transforms.size(); ++row) {
     for (int axis = 0; axis < 3; ++axis) {
@@ -132,33 +114,7 @@ void UpdateStates(std::span<Transform> transforms,
 
 BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
     : config_(config) {
-  if (!std::isfinite(config_.boundary_half_extent) ||
-      config_.boundary_half_extent <= 0.0F) {
-    throw std::invalid_argument(
-        "Boundary half extent must be finite and positive");
-  }
-  if (!std::isfinite(config_.spawn_half_extent) ||
-      config_.spawn_half_extent < 0.0F ||
-      config_.spawn_half_extent > config_.boundary_half_extent ||
-      config_.spawn_half_extent > std::numeric_limits<float>::max() / 2.0F) {
-    throw std::invalid_argument(
-        "Spawn range must be finite, representable and inside the boundary");
-  }
-  const auto& parameters = config_.parameters;
-  for (const float value :
-       {config_.initial_speed, parameters.neighbor_radius,
-        parameters.separation_radius, parameters.separation_weight,
-        parameters.alignment_weight, parameters.cohesion_weight,
-        parameters.preferred_speed, parameters.max_speed,
-        parameters.max_alignment_force}) {
-    if (!std::isfinite(value) || value < 0.0F) {
-      throw std::invalid_argument(
-          "Initial speed and Boid parameters must be finite and nonnegative");
-    }
-  }
-  if (config_.dummy_change_percent > 100U) {
-    throw std::invalid_argument("Dummy change percent must be in [0, 100]");
-  }
+  boids::ValidateSimulationConfig(config_);
   if (config_.boid_count >
           std::numeric_limits<std::size_t>::max() - config_.dummy_count ||
       config_.boid_count + config_.dummy_count >
@@ -233,9 +189,7 @@ engine::ecs::Entity BoidSimulation::EntityFor(std::size_t logical_id) const {
 }
 
 void BoidSimulation::ChangeDummies(std::span<const std::size_t> dummy_ids) {
-  // A failed change requires reinitialization; never run another step with an
-  // incomplete mapping. No spans or table references cross structural changes.
-  initialized_ = false;
+  // No spans or table references cross structural changes.
   for (const auto id : dummy_ids) {
     const auto entity = EntityFor(id);
     if (input_->initial_objects[id].kind != boids::ObjectKind::Dummy) {
@@ -249,7 +203,6 @@ void BoidSimulation::ChangeDummies(std::span<const std::size_t> dummy_ids) {
     entities_[id] =
         registry_.Create(InitialTransform(initial), Velocity{initial.velocity});
   }
-  initialized_ = true;
 }
 
 void BoidSimulation::Update(float dt, std::span<const std::size_t> dummy_ids,
@@ -257,9 +210,10 @@ void BoidSimulation::Update(float dt, std::span<const std::size_t> dummy_ids,
   if (!initialized_) {
     throw std::logic_error("Simulation must be initialized before Update");
   }
-  if (!std::isfinite(dt) || dt < 0.0F) {
-    throw std::invalid_argument("Delta time must be finite and nonnegative");
-  }
+  boids::ValidateDeltaTime(dt);
+  // Any failure after work starts can leave partial changes or accelerations.
+  // Require a fresh initialization before another step can use that state.
+  initialized_ = false;
   if (dummy_ids.empty()) {
     timing.record_zero("entity_changes");
   } else {
@@ -280,6 +234,7 @@ void BoidSimulation::Update(float dt, std::span<const std::size_t> dummy_ids,
   if (transforms.empty()) {
     timing.record_zero("neighbor_calculation");
     timing.record_zero("state_update");
+    initialized_ = true;
     return;
   }
 
@@ -291,6 +246,7 @@ void BoidSimulation::Update(float dt, std::span<const std::size_t> dummy_ids,
   UpdateStates(transforms, velocities, accelerations, parameters, dt,
                config_.boundary_half_extent);
   timing.stop("state_update");
+  initialized_ = true;
 }
 
 engine::measurement::StorageReport BoidSimulation::GetStorageReport() const {

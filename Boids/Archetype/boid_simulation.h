@@ -22,6 +22,8 @@ class BoidSimulation {
   void Initialize(const boids::SimulationInput& input);
   // Pass a unique Dummy list prepared by Common. There is no internal plan
   // cursor; warmup and measurement use consecutive plans from the caller.
+  // An exception after work starts requires reinitialization and discarding
+  // that timing run. Non-finite arithmetic throws std::overflow_error.
   void Update(float dt, std::span<const std::size_t> dummy_ids,
               engine::measurement::TimingRecorder& timing);
   [[nodiscard]] engine::measurement::StorageReport GetStorageReport() const;

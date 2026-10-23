@@ -9,7 +9,7 @@
 | --- | --- |
 | `Engine/` | ECS 저장·조회, CPU Transform 계산, 공통 벤치마크와 기존 그래픽 런타임 |
 | `Engine/ECS/Archetype/` | 컴포넌트 조합별 column 저장, Entity 수명·행 위치와 저장량 보고 |
-| `Boids/Common/` | 공통 설정·행동 파라미터와 초기 상태·Dummy 변경 계획 생성 |
+| `Boids/Common/` | 공통 설정·검증·행동 수식과 초기 상태·Dummy 변경 계획 생성 |
 | `Boids/ECS/` | Registry와 System으로 Boids 시뮬레이션 구현 |
 | `Boids/OOP/` | BoidObject의 데이터와 메서드로 시뮬레이션 구현 |
 | `Boids/Archetype/` | Boid·Dummy 테이블의 column 직접 순회와 공통 계획에 따른 Dummy 교체 |
@@ -21,6 +21,17 @@ Engine에 도메인 로직을 넣거나 App에서 ECS 조회·Boids 계산을 �
 `Boids::Common`은 GLM을 직접 제공하는 헤더 전용 타깃이며 Engine에 의존하지 않는다.
 OOP는 `Engine::ECS`에 의존하지 않는다.
 세 시뮬레이션은 GLM만 사용하는 `Engine::RenderData`로 CPU Transform을 계산한다.
+`Boids/Common/simulation_validation.h`는 공통 입력 생성과 세 시뮬레이션의
+설정·dt 검증을 제공하며, 저장소별 개체 수 한도는 각 구현에서 검사한다.
+`Boids/Common/alignment.h`는 이웃 평균 속도로부터 alignment steering을 구하는
+수식을 공유한다. 저장소별 이웃 순회와 합산은 각 구현이 담당한다.
+`Boids/Common/vector_math.h`는 방향 정규화와 크기·속도 제한을 제공한다.
+일반 입력은 기존 float 연산 순서를 유지하며, 벡터 길이·반경 제곱이
+overflow하거나 subnormal·0으로 underflow하면 해당 계산만 double로 수행한다.
+정규화·크기 제한에 전달된 비유한 벡터와 저장할 수 없는 가속도·적분 위치는
+`std::overflow_error`로 실행을 중단한다. 제한값이 0인 경우도 검사하며
+위치 overflow는 경계 처리 전에 거부한다. RenderData의
+방향 회전 계산도 같은 범위 초과를 처리하며 Boids에 의존하지 않는다.
 
 `Benchmarker::Experiment`는 실험 실행 함수를 제공한다. App은 구현을 선택하고 이
 함수를 호출한다. 이 함수가 Boids를 직접 실행하며, Engine에는 콜백이나 시뮬레이션
@@ -195,7 +206,8 @@ Velocity·Acceleration은 기존 `Boids/ECS/Components/`의 단순 데이터 타
 복원하고 논리 번호→Entity 배열을 갱신한다. 배열 index와 Entity ID·테이블 행은
 독립적이다. `EntityFor(logical_id)`는 현재 Entity를 반환하고 없는 번호는
 `std::out_of_range`로 거부한다. `GetRegistry()`는 const 조회만 제공한다.
-할당 실패 등으로 변경이 중단되면 다시 Initialize한 뒤 실행해야 한다.
+할당 실패나 수치 overflow 등으로 Update 실행 도중 예외가 발생하면
+다시 Initialize한 뒤 실행해야 한다. 실패한 계측 실행은 폐기하고 새 recorder를 사용한다.
 
 구조 변경이 끝난 후 `query_preparation`에서 Boid 테이블과 네 column span을
 다시 조회한다. `neighbor_calculation`은 이 column의 행끼리 naive all-pairs로
@@ -215,6 +227,9 @@ Dummy 변경 비율 0·40·100%에서 warmup 이후 계측을 활성화한 실�
 무계측으로 연속 실행한 결과를 매 step 비교한다. 논리 번호별 위치·속도·가속도와
 부호를 맞춘 회전 성분의 절대 허용 오차는 `1e-5`이며, Entity generation과 최종
 저장량도 비교하여 측정 전환 시 상태·계획을 다시 시작하지 않음을 검증한다.
+별도 double 수식으로 실제 갱신 전 상태에서 다음 상태를 예측하는 테스트도 제공한다.
+이 테스트는 production 수학 함수나 OOP 구현을 기대값 계산에 재사용하지 않고,
+3개 seed·3개 변경 비율·3개 Boid 수에서 각각 60 step을 `1e-5` 허용 오차로 검사한다.
 
 현재 App/Benchmarker 비교 실행은 Boid 전용 ECS/OOP이며 Dummy 변경과 Archetype
 선택을 연결하지 않았다. 상속 기반 OOP와 세 구현 전체 동등성 검증도 후속 작업이다.

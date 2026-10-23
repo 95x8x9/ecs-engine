@@ -25,11 +25,16 @@ glm::mat4 ToModelMatrix(const Transform& transform) {
 }
 
 glm::quat RotationFromDirection(const glm::vec3& direction) {
-  if (glm::dot(direction, direction) <= kMinDirectionLengthSquared) {
+  const float squared_length = glm::dot(direction, direction);
+  if (squared_length <= kMinDirectionLengthSquared) {
     return glm::quat{1.0F, 0.0F, 0.0F, 0.0F};
   }
 
-  const glm::vec3 forward = glm::normalize(direction);
+  // The components may be finite even when their squared length overflows.
+  const glm::vec3 forward =
+      std::isfinite(squared_length)
+          ? glm::normalize(direction)
+          : glm::vec3{glm::normalize(glm::dvec3{direction})};
   const glm::vec3 reference_up =
       std::abs(glm::dot(forward, kWorldUp)) > 0.99F
           ? glm::vec3{1.0F, 0.0F, 0.0F}

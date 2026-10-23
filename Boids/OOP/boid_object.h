@@ -35,8 +35,6 @@ class BoidObject {
   }
 
  private:
-  glm::vec3 CalculateAlignment(const glm::vec3& velocity_sum,
-                               std::size_t neighbor_count) const;
   engine::renderer::Transform transform_;
   engine::renderer::MeshRenderer mesh_renderer_;
   glm::vec3 velocity_;

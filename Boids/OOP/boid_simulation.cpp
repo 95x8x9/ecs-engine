@@ -2,26 +2,15 @@
 
 #include <glm/geometric.hpp>
 #include <random>
-#include <stdexcept>
-#include <utility>
 
+#include "Boids/Common/simulation_validation.h"
 #include "Boids/OOP/boid_object.h"
 
 namespace boids::oop {
 
 BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
-    : config_(std::move(config)) {
-  if (config_.boundary_half_extent <= 0.0F) {
-    throw std::invalid_argument("Boundary half extent must be positive");
-  }
-  if (config_.spawn_half_extent < 0.0F ||
-      config_.spawn_half_extent > config_.boundary_half_extent) {
-    throw std::invalid_argument(
-        "Spawn half extent must be inside the simulation boundary");
-  }
-  if (config_.initial_speed < 0.0F) {
-    throw std::invalid_argument("Initial speed cannot be negative");
-  }
+    : config_(config) {
+  boids::ValidateSimulationConfig(config_);
 }
 
 void BoidSimulation::Initialize() {
@@ -60,9 +49,7 @@ void BoidSimulation::Update(float delta_seconds) {
 
 void BoidSimulation::Update(float delta_seconds,
                             engine::measurement::TimingRecorder& timing) {
-  if (delta_seconds < 0.0F) {
-    throw std::invalid_argument("Delta time cannot be negative");
-  }
+  boids::ValidateDeltaTime(delta_seconds);
 
   timing.record_zero("entity_changes");
   timing.record_zero("query_preparation");

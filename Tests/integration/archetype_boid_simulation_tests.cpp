@@ -632,6 +632,76 @@ TEST(ArchetypeBoidSimulationTest, ZeroMaxSpeedStopsBoidAndResetsOrientation) {
   ExpectRotation(state.transform.rotation, glm::vec3{0.0F});
 }
 
+TEST(ArchetypeBoidSimulationTest,
+     LimitsLargeFiniteVelocityWithoutLosingDirection) {
+  BoidSimulationConfig config;
+  config.boid_count = 1U;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {3e20F, 4e20F, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  const auto initial = BoidState(simulation, 0U);
+  ExpectVector(initial.transform.rotation * glm::vec3{0, 0, 1},
+               {0.6F, 0.8F, 0});
+  Step(simulation, 0.0F);
+  const auto state = BoidState(simulation, 0U);
+  ExpectVector(state.velocity,
+               glm::vec3{0.6F, 0.8F, 0} * config.parameters.max_speed);
+  ExpectRotation(state.transform.rotation, state.velocity);
+}
+
+TEST(ArchetypeBoidSimulationTest, DoesNotIncreaseLargeVelocityBelowSpeedLimit) {
+  BoidSimulationConfig config;
+  config.boid_count = 1U;
+  config.parameters.max_speed = 2e20F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {1e20F, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  Step(simulation, 0.0F);
+  ExpectVector(BoidState(simulation, 0U).velocity,
+               input.initial_objects[0].velocity);
+}
+
+TEST(ArchetypeBoidSimulationTest, AlignsWithLargeFiniteNeighborVelocity) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.parameters.separation_weight = 0.0F;
+  config.parameters.cohesion_weight = 0.0F;
+  config.parameters.alignment_weight = 2.0F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {1, 0, 0}, {3e20F, 4e20F, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  Step(simulation, 0.0F);
+  // Normalize the neighbor direction, limit steering to 1.5, then weight by 2.
+  ExpectVector(BoidState(simulation, 0U).acceleration, {1.8F, 2.4F, 0});
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     LimitsAlignmentWhenBothSquaredLengthsOverflow) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.parameters.separation_weight = 0.0F;
+  config.parameters.cohesion_weight = 0.0F;
+  config.parameters.preferred_speed = 0.0F;
+  config.parameters.max_alignment_force = 1e20F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {3e20F, 4e20F, 0}},
+                          {ObjectKind::Boid, 1U, {1, 0, 0}, {1, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  Step(simulation, 0.0F);
+  ExpectVector(BoidState(simulation, 0U).acceleration /
+                   config.parameters.max_alignment_force,
+               {-0.6F, -0.8F, 0});
+}
+
 TEST(ArchetypeBoidSimulationTest, ZeroDtComputesAccelerationWithoutMoving) {
   BoidSimulationConfig config;
   config.boid_count = 2U;
@@ -648,6 +718,135 @@ TEST(ArchetypeBoidSimulationTest, ZeroDtComputesAccelerationWithoutMoving) {
     ExpectVector(state.velocity, initial.velocity);
     EXPECT_GT(glm::length(state.acceleration), 0.0F);
   }
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     RejectsArithmeticOverflowAndRequiresReinitialization) {
+  BoidSimulationConfig config;
+  config.boid_count = 3U;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {1, 0, 0}, {2e38F, 0, 0}},
+                          {ObjectKind::Boid, 2U, {2, 0, 0}, {2e38F, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  TimingRecorder timing({"entity_changes", "query_preparation",
+                         "neighbor_calculation", "state_update"});
+  timing.begin_measurement(1U);
+  timing.begin_step_measurement();
+  EXPECT_THROW(simulation.Update(0.1F, {}, timing), std::overflow_error);
+  EXPECT_THROW(timing.end_step_measurement(), std::logic_error);
+  EXPECT_THROW(static_cast<void>(timing.result()), std::logic_error);
+  EXPECT_THROW(Step(simulation, 0.1F), std::logic_error);
+  const auto valid = boids::PrepareSimulationInput(config, 0U);
+  simulation.Initialize(valid);
+  EXPECT_NO_THROW(Step(simulation, 0.1F));
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     IncludesCoincidentNeighborsForTinyPositiveRadius) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.parameters.neighbor_radius = 1e-30F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {0, 0, 0}, {1, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  Step(simulation, 0.0F);
+  ExpectVector(BoidState(simulation, 0U).acceleration, {1.5F, 0, 0});
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     IncludesDistantNeighborsWhenRadiusSquaredOverflows) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.parameters.neighbor_radius = 2e20F;
+  config.parameters.separation_weight = 0.0F;
+  config.parameters.cohesion_weight = 0.0F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {1e20F, 0, 0}, {1, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  Step(simulation, 0.0F);
+  ExpectVector(BoidState(simulation, 0U).acceleration, {1.5F, 0, 0});
+}
+
+TEST(ArchetypeBoidSimulationTest, ReinitializesAfterInvalidDummyPlan) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.dummy_count = 3U;
+  const auto input = boids::PrepareSimulationInput(config, 0U);
+  BoidSimulation simulation(config);
+  for (const std::vector<std::size_t>& plan :
+       {std::vector<std::size_t>{0U}, {99U}, {1U, 1U}, {1U, 0U}, {1U, 99U}}) {
+    simulation.Initialize(input);
+    if (std::find(plan.begin(), plan.end(), 0U) != plan.end()) {
+      EXPECT_THROW(Step(simulation, 0.01F, plan), std::invalid_argument);
+    } else {
+      EXPECT_THROW(Step(simulation, 0.01F, plan), std::out_of_range);
+    }
+    EXPECT_THROW(Step(simulation, 0.01F), std::logic_error);
+    simulation.Initialize(input);
+    EXPECT_NO_THROW(Step(simulation, 0.01F));
+    EXPECT_EQ(simulation.GetRegistry().EntityCount(),
+              input.initial_objects.size());
+    ExpectDummiesUnchanged(simulation, input);
+  }
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     RejectedInputPreservesPreviouslyInitializedState) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.dummy_count = 3U;
+  const auto input = boids::PrepareSimulationInput(config, 0U);
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  const auto previous = simulation.EntityFor(0U);
+  auto invalid = input;
+  invalid.initial_objects.back().logical_id = 0U;
+  EXPECT_THROW(simulation.Initialize(invalid), std::invalid_argument);
+  EXPECT_EQ(simulation.EntityFor(0U), previous);
+  EXPECT_NO_THROW(Step(simulation, 0.01F));
+  ExpectDummiesUnchanged(simulation, input);
+}
+
+TEST(ArchetypeBoidSimulationTest,
+     RejectsUnrepresentableAccelerationBeforeMoving) {
+  BoidSimulationConfig config;
+  config.boid_count = 3U;
+  config.parameters.cohesion_weight = std::numeric_limits<float>::max();
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {1, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 2U, {2, 0, 0}, {0, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  EXPECT_THROW(Step(simulation, 0.1F), std::overflow_error);
+  for (const auto& initial : input.initial_objects)
+    ExpectVector(BoidState(simulation, initial.logical_id).transform.position,
+                 initial.position);
+  EXPECT_THROW(Step(simulation, 0.1F), std::logic_error);
+}
+
+TEST(ArchetypeBoidSimulationTest, RejectsVelocityOverflowDuringIntegration) {
+  BoidSimulationConfig config;
+  config.boid_count = 2U;
+  config.parameters.cohesion_weight = 1e38F;
+  const SimulationInput input{
+      .initial_objects = {{ObjectKind::Boid, 0U, {0, 0, 0}, {0, 0, 0}},
+                          {ObjectKind::Boid, 1U, {2, 0, 0}, {0, 0, 0}}},
+      .dummy_steps = {}};
+  BoidSimulation simulation(config);
+  simulation.Initialize(input);
+  EXPECT_THROW(Step(simulation, 2.0F), std::overflow_error);
+  EXPECT_THROW(Step(simulation, 0.1F), std::logic_error);
 }
 
 TEST(ArchetypeBoidSimulationTest, HandlesOverlapZeroVelocityAndRadiusCutoff) {

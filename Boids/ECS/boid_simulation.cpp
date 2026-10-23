@@ -3,9 +3,8 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <random>
-#include <stdexcept>
-#include <utility>
 
+#include "Boids/Common/simulation_validation.h"
 #include "Boids/ECS/Components/acceleration.h"
 #include "Boids/ECS/Components/velocity.h"
 #include "Boids/ECS/Systems/boid_orientation_system.h"
@@ -17,20 +16,9 @@
 
 namespace boids::ecs {
 
-// Validate config and add systems to system manager
 BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
-    : config_(std::move(config)) {
-  if (config_.boundary_half_extent <= 0.0F) {
-    throw std::invalid_argument("Boundary half extent must be positive");
-  }
-  if (config_.spawn_half_extent < 0.0F ||
-      config_.spawn_half_extent > config_.boundary_half_extent) {
-    throw std::invalid_argument(
-        "Spawn half extent must be inside the simulation boundary");
-  }
-  if (config_.initial_speed < 0.0F) {
-    throw std::invalid_argument("Initial speed cannot be negative");
-  }
+    : config_(config) {
+  boids::ValidateSimulationConfig(config_);
 
   system_manager_.Add<BoidSystem>();
   system_manager_.AddTimed<MovementSystem>("state_update");
@@ -39,7 +27,6 @@ BoidSimulation::BoidSimulation(boids::BoidSimulationConfig config)
   system_manager_.AddTimed<BoidOrientationSystem>("state_update");
 }
 
-// Initalize entities to simulation
 void BoidSimulation::Initialize() {
   registry_.Clear();
 
@@ -85,9 +72,7 @@ void BoidSimulation::Update(float delta_seconds) {
 
 void BoidSimulation::Update(float delta_seconds,
                             engine::measurement::TimingRecorder& timing) {
-  if (delta_seconds < 0.0F) {
-    throw std::invalid_argument("Delta time cannot be negative");
-  }
+  boids::ValidateDeltaTime(delta_seconds);
   // Dummy churn is not implemented yet; current entity changes require no work.
   timing.record_zero("entity_changes");
   system_manager_.Update(registry_, delta_seconds, timing);
